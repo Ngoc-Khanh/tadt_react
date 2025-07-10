@@ -1,5 +1,5 @@
-import { CloudUpload, KeyboardArrowLeft, Map, Layers, FullscreenExit, Fullscreen } from '@mui/icons-material'
-import { Box, Button, IconButton, Typography, Paper, Chip, Divider, Tooltip } from '@mui/material'
+import { CloudUpload, KeyboardArrowLeft, Layers, Map } from '@mui/icons-material'
+import { Box, Button, Chip, Divider, IconButton, Paper, Tooltip, Typography } from '@mui/material'
 import { useAtom, useSetAtom } from 'jotai'
 import { useState } from 'react'
 import { layerGroupsAtom, showMapAtom, successfulFilesAtom } from '../../../stores/importKMLAtoms'
@@ -10,39 +10,28 @@ export function MapView() {
   const [layerGroups] = useAtom(layerGroupsAtom)
   const [successfulFiles] = useAtom(successfulFilesAtom)
   const setShowMap = useSetAtom(showMapAtom)
-  const [isFullscreen, setIsFullscreen] = useState(false)
   const [showLayerPanel, setShowLayerPanel] = useState(true)
 
   // Tính tổng số features
-  const totalFeatures = layerGroups.reduce((total, group) => 
-    total + group.layers.reduce((layerTotal, layer) => 
+  const totalFeatures = layerGroups.reduce((total, group) =>
+    total + group.layers.reduce((layerTotal, layer) =>
       layerTotal + (layer.geometry?.length || 0), 0
     ), 0
   )
 
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen()
-      setIsFullscreen(true)
-    } else {
-      document.exitFullscreen()
-      setIsFullscreen(false)
-    }
-  }
-
   return (
-    <Box sx={{ 
-      height: '100%', 
-      display: 'flex', 
+    <Box sx={{
+      height: '100%',
+      display: 'flex',
       flexDirection: 'column',
       bgcolor: 'grey.50'
     }}>
       {/* Enhanced Header */}
-      <Paper 
+      <Paper
         elevation={1}
-        sx={{ 
-          display: 'flex', 
-          alignItems: 'center', 
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
           justifyContent: 'space-between',
           p: 2,
           m: 2,
@@ -51,9 +40,9 @@ export function MapView() {
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <IconButton 
-            onClick={() => setShowMap(false)} 
-            sx={{ 
+          <IconButton
+            onClick={() => setShowMap(false)}
+            sx={{
               bgcolor: 'primary.50',
               color: 'primary.main',
               '&:hover': { bgcolor: 'primary.100' }
@@ -61,7 +50,7 @@ export function MapView() {
           >
             <KeyboardArrowLeft />
           </IconButton>
-          
+
           <Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
               <Map color="primary" />
@@ -69,24 +58,24 @@ export function MapView() {
                 Bản đồ KML/KMZ
               </Typography>
             </Box>
-            
+
             <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-              <Chip 
+              <Chip
                 icon={<Layers />}
                 label={`${layerGroups.length} Layer Groups`}
-                size="small" 
+                size="small"
                 color="primary"
                 variant="outlined"
               />
-              <Chip 
+              <Chip
                 label={`${totalFeatures} Features`}
-                size="small" 
+                size="small"
                 color="success"
                 variant="outlined"
               />
-              <Chip 
+              <Chip
                 label={`${successfulFiles.length} Files`}
-                size="small" 
+                size="small"
                 color="info"
                 variant="outlined"
               />
@@ -101,7 +90,7 @@ export function MapView() {
               startIcon={<Layers />}
               variant={showLayerPanel ? 'contained' : 'outlined'}
               size="small"
-              sx={{ 
+              sx={{
                 borderRadius: 2,
                 textTransform: 'none',
                 fontWeight: 600,
@@ -114,7 +103,7 @@ export function MapView() {
                 } : {
                   borderColor: 'grey.300',
                   color: 'text.secondary',
-                  '&:hover': { 
+                  '&:hover': {
                     borderColor: 'primary.main',
                     color: 'primary.main',
                     bgcolor: 'primary.50'
@@ -125,24 +114,14 @@ export function MapView() {
               {showLayerPanel ? 'Ẩn' : 'Layers'}
             </Button>
           </Tooltip>
-          
-          <IconButton 
-            onClick={toggleFullscreen}
-            sx={{ 
-              bgcolor: 'grey.100',
-              '&:hover': { bgcolor: 'grey.200' }
-            }}
-          >
-            {isFullscreen ? <FullscreenExit /> : <Fullscreen />}
-          </IconButton>
-          
+
           <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
-          
+
           <Button
             variant="contained"
             startIcon={<CloudUpload />}
             onClick={() => setShowMap(false)}
-            sx={{ 
+            sx={{
               px: 3,
               borderRadius: 2,
               textTransform: 'none',
@@ -155,21 +134,21 @@ export function MapView() {
       </Paper>
 
       {/* Main Content */}
-      <Box sx={{ 
-        flexGrow: 1, 
-        display: 'flex', 
-        gap: 2, 
-        px: 2, 
+      <Box sx={{
+        flexGrow: 1,
+        display: 'flex',
+        gap: 2,
+        px: 2,
         pb: 2,
         height: '750px',
-        minHeight: 0 
+        minHeight: 0
       }}>
         {/* Map Area */}
-        <Paper 
+        <Paper
           elevation={2}
-          sx={{ 
-            flexGrow: 1, 
-            display: 'flex', 
+          sx={{
+            flexGrow: 1,
+            display: 'flex',
             flexDirection: 'column',
             borderRadius: 2,
             overflow: 'hidden',
@@ -180,12 +159,12 @@ export function MapView() {
         >
           {layerGroups.length > 0 ? (
             <Box sx={{ position: 'relative', height: '100%' }}>
-              <LazyLeafletMap 
+              <LazyLeafletMap
                 layerGroups={layerGroups}
                 height="100%"
                 onLayoutChange={showLayerPanel}
               />
-              
+
               {/* Floating Layer Toggle - only show when panel is hidden and we have layers */}
               {!showLayerPanel && (
                 <Box
@@ -226,11 +205,11 @@ export function MapView() {
               )}
             </Box>
           ) : (
-            <Box 
-              sx={{ 
+            <Box
+              sx={{
                 flexGrow: 1,
-                display: 'flex', 
-                alignItems: 'center', 
+                display: 'flex',
+                alignItems: 'center',
                 justifyContent: 'center',
                 bgcolor: 'grey.50',
                 minHeight: '500px',
@@ -254,7 +233,7 @@ export function MapView() {
                 >
                   <Map sx={{ fontSize: 60, color: 'primary.main' }} />
                 </Box>
-                
+
                 <Typography variant="h4" gutterBottom fontWeight="bold" color="text.primary">
                   Bản đồ tương tác
                 </Typography>
@@ -264,12 +243,12 @@ export function MapView() {
                 <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 400, mx: 'auto' }}>
                   Chưa có dữ liệu để hiển thị. Hãy import file KML/KMZ để xem bản đồ với các layer địa lý.
                 </Typography>
-                
+
                 <Button
                   variant="outlined"
                   startIcon={<CloudUpload />}
                   onClick={() => setShowMap(false)}
-                  sx={{ 
+                  sx={{
                     mt: 3,
                     borderRadius: 2,
                     textTransform: 'none'
@@ -283,16 +262,16 @@ export function MapView() {
         </Paper>
 
         {/* Layers Panel */}
-        <Box 
-          sx={{ 
+        <Box
+          sx={{
             width: showLayerPanel ? 380 : 0,
             transition: 'width 0.3s ease-in-out',
             overflow: 'hidden',
             display: 'flex'
           }}
         >
-          <Box 
-            sx={{ 
+          <Box
+            sx={{
               width: 380,
               opacity: showLayerPanel ? 1 : 0,
               transform: showLayerPanel ? 'translateX(0)' : 'translateX(100%)',

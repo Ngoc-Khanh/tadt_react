@@ -21,11 +21,30 @@ import {
   Tooltip
 } from '@mui/material'
 import { useAtom, useSetAtom } from 'jotai'
+import { useState } from 'react'
+import { GeometryDetailDialog } from './GeometryDetailDialog'
+import type { LayerData } from '@/stores/importKMLAtoms'
 
 export function LayerPanel() {
   const [layerGroups] = useAtom(layerGroupsAtom)
   const toggleLayerGroupVisibility = useSetAtom(toggleLayerGroupVisibilityAtom)
   const toggleLayerVisibility = useSetAtom(toggleLayerVisibilityAtom)
+  
+  // State cho geometry detail dialog
+  const [geometryDialogOpen, setGeometryDialogOpen] = useState(false)
+  const [selectedLayer, setSelectedLayer] = useState<LayerData | null>(null)
+
+  // Handler để mở geometry detail dialog
+  const handleShowGeometryDetails = (layer: LayerData) => {
+    setSelectedLayer(layer)
+    setGeometryDialogOpen(true)
+  }
+
+  // Handler để đóng dialog
+  const handleCloseGeometryDialog = () => {
+    setGeometryDialogOpen(false)
+    setSelectedLayer(null)
+  }
 
   // Tính tổng số features
   const totalFeatures = layerGroups.reduce((total, group) => 
@@ -194,8 +213,12 @@ export function LayerPanel() {
                           <ListItemSecondaryAction>
                             <Box sx={{ display: 'flex', gap: 0.5 }}>
                               {layer.geometry && layer.geometry.length > 0 && (
-                                <Tooltip title={`${layer.geometry.length} features - Click để xem chi tiết`}>
-                                  <IconButton size="small" sx={{ color: 'info.main' }}>
+                                <Tooltip title={`${layer.geometry.length} features - Click để xem chi tiết tất cả đối tượng`}>
+                                  <IconButton 
+                                    size="small" 
+                                    sx={{ color: 'info.main' }}
+                                    onClick={() => handleShowGeometryDetails(layer)}
+                                  >
                                     <Info fontSize="small" />
                                   </IconButton>
                                 </Tooltip>
@@ -224,6 +247,13 @@ export function LayerPanel() {
           )}
         </Box>
       </Paper>
+      
+      {/* Geometry Detail Dialog */}
+      <GeometryDetailDialog
+        open={geometryDialogOpen}
+        onClose={handleCloseGeometryDialog}
+        layer={selectedLayer}
+      />
     </Box>
   )
 } 
