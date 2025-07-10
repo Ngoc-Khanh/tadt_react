@@ -1,9 +1,11 @@
 import {
   layerGroupsAtom,
   toggleLayerGroupVisibilityAtom,
-  toggleLayerVisibilityAtom
+  toggleLayerVisibilityAtom,
+  fitToLayerAtom,
+  fitToGroupAtom
 } from '@/stores/importKMLAtoms'
-import { Layers, Visibility, VisibilityOff, Info } from '@mui/icons-material'
+import { Layers, Visibility, VisibilityOff, Info, MyLocation, Explore } from '@mui/icons-material'
 import {
   Alert,
   Box,
@@ -29,6 +31,8 @@ export function LayerPanel() {
   const [layerGroups] = useAtom(layerGroupsAtom)
   const toggleLayerGroupVisibility = useSetAtom(toggleLayerGroupVisibilityAtom)
   const toggleLayerVisibility = useSetAtom(toggleLayerVisibilityAtom)
+  const fitToLayer = useSetAtom(fitToLayerAtom)
+  const fitToGroup = useSetAtom(fitToGroupAtom)
   
   // State cho geometry detail dialog
   const [geometryDialogOpen, setGeometryDialogOpen] = useState(false)
@@ -154,6 +158,19 @@ export function LayerPanel() {
                           {group.layers.length} layer(s)
                         </Typography>
                       </Box>
+                      <Tooltip title="Di chuyển map đến vùng này">
+                        <IconButton 
+                          size="small"
+                          onClick={() => fitToGroup(group.id)}
+                          sx={{ 
+                            color: 'primary.main',
+                            bgcolor: 'primary.50',
+                            '&:hover': { bgcolor: 'primary.100' }
+                          }}
+                        >
+                          <Explore fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
                     </Box>
                     
                     <List dense sx={{ bgcolor: 'grey.50', borderRadius: 1, p: 0 }}>
@@ -212,6 +229,19 @@ export function LayerPanel() {
                           
                           <ListItemSecondaryAction>
                             <Box sx={{ display: 'flex', gap: 0.5 }}>
+                              <Tooltip title="Di chuyển map đến layer này">
+                                <IconButton 
+                                  size="small"
+                                  onClick={() => fitToLayer(layer.id)}
+                                  sx={{ 
+                                    color: 'success.main',
+                                    '&:hover': { bgcolor: 'success.50' }
+                                  }}
+                                >
+                                  <MyLocation fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                              
                               {layer.geometry && layer.geometry.length > 0 && (
                                 <Tooltip title={`${layer.geometry.length} features - Click để xem chi tiết tất cả đối tượng`}>
                                   <IconButton 

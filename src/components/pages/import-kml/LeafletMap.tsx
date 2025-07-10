@@ -1,6 +1,8 @@
 import React, { useMemo, useCallback, useEffect, useRef } from 'react'
 import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet'
 import { LatLngBounds, Map as LeafletMapType } from 'leaflet'
+import { useAtom, useSetAtom } from 'jotai'
+import { shouldFitBoundsAtom, clearFitBoundsAtom, manualBoundsAtom } from '../../../stores/importKMLAtoms'
 import type { LayerGroup, GeometryData, LayerData } from '../../../stores/importKMLAtoms'
 import 'leaflet/dist/leaflet.css'
 
@@ -35,16 +37,63 @@ interface LeafletMapProps {
   onLayoutChange?: boolean // Trigger khi layout thay đổi
 }
 
-// Component để fit bounds khi có data mới
+// Component để fit bounds khi có data mới hoặc khi shouldFitBounds = true
 const MapController = React.memo(({ bounds }: { bounds?: [[number, number], [number, number]] }) => {
   const map = useMap()
 
+  // Chỉ log, không tự động fit bounds nữa để tránh conflict với FitBoundsController
   useEffect(() => {
     if (bounds && map) {
-      const latLngBounds = new LatLngBounds(bounds[0], bounds[1])
-      map.fitBounds(latLngBounds, { padding: [20, 20] })
+      console.log('[MapController] Bounds available but not auto-fitting:', bounds)
+      // Removed auto-fit logic to avoid conflict with FitBoundsController
     }
   }, [bounds, map])
+
+  return null
+})
+
+// Component để tự động fit bounds khi vào map view lần đầu
+const FitBoundsController = React.memo(() => {
+  const map = useMap()
+  const [shouldFitBounds] = useAtom(shouldFitBoundsAtom)
+  const [manualBounds] = useAtom(manualBoundsAtom)
+  const clearFitBounds = useSetAtom(clearFitBoundsAtom)
+
+  console.log('[FitBoundsController] Component rendered with:', { shouldFitBounds, manualBounds })
+
+  useEffect(() => {
+    console.log('[FitBoundsController] Effect triggered:', { shouldFitBounds, manualBounds })
+    
+    if (shouldFitBounds && manualBounds && map) {
+      console.log('[FitBoundsController] Attempting to fit bounds:', manualBounds)
+      
+      // Delay một chút để đảm bảo map đã render xong
+      const timer = setTimeout(() => {
+        try {
+          const latLngBounds = new LatLngBounds(manualBounds[0], manualBounds[1])
+          console.log('[FitBoundsController] Fitting to bounds:', latLngBounds)
+          
+          map.fitBounds(latLngBounds, { 
+            padding: [50, 50],
+            maxZoom: 16, // Giới hạn zoom để không zoom quá gần
+            animate: true,
+            duration: 1.5 // Animation mượt mà hơn
+          })
+          
+          console.log('[FitBoundsController] Fit bounds completed')
+          clearFitBounds() // Clear flag sau khi fit bounds
+        } catch (error) {
+          console.error('[FitBoundsController] Error fitting bounds:', error)
+          clearFitBounds()
+        }
+      }, 300) // Tăng delay để đảm bảo map ready
+
+      return () => clearTimeout(timer)
+    } else if (shouldFitBounds && !manualBounds) {
+      console.warn('[FitBoundsController] shouldFitBounds=true but manualBounds is undefined')
+      clearFitBounds()
+    }
+  }, [shouldFitBounds, manualBounds, map, clearFitBounds])
 
   return null
 })
@@ -142,34 +191,132 @@ const LayerRenderer = React.memo(({
   )
 })
 
-// Component chính
-export const LeafletMap = React.memo<LeafletMapProps>(({ 
+// Component chính (tạm thời loại bỏ memo để debug)
+export const LeafletMap = ({ 
   layerGroups, 
   height = '100%',
   onLayoutChange
-}) => {
+}: LeafletMapProps) => {
   const mapRef = useRef<LeafletMapType | null>(null)
+  
+  console.log('[LeafletMap] Component rendered with layerGroups:', layerGroups)
+  console.log('[LeafletMap] Time:', new Date().toISOString())
+
+  // Fallback function để tính bounds từ geometry data
+  const calculateBoundsFromGeometry = (layerGroups: LayerGroup[]) => {
+    console.log('[LeafletMap] Calculating bounds from geometry data as fallback')
+    
+    let minLat = Infinity, minLng = Infinity
+    let maxLat = -Infinity, maxLng = -Infinity
+    let foundValidBounds = false
+
+    layerGroups.forEach((group, groupIndex) => {
+      if (!group.visible) return
+      
+      group.layers.forEach((layer, layerIndex) => {
+        if (!layer.visible || !layer.geometry?.length) return
+        
+        console.log(`[LeafletMap] Processing layer ${groupIndex}-${layerIndex} geometry:`, layer.geometry.length)
+        
+        layer.geometry.forEach((geom, geomIndex) => {
+          console.log(`[LeafletMap] Processing geometry ${geomIndex}:`, geom.type, geom.coordinates)
+          
+          const processCoordinate = (coord: number[]) => {
+            if (coord.length >= 2) {
+              const [lng, lat] = coord
+              if (typeof lng === 'number' && typeof lat === 'number' && !isNaN(lng) && !isNaN(lat)) {
+                minLat = Math.min(minLat, lat)
+                minLng = Math.min(minLng, lng)
+                maxLat = Math.max(maxLat, lat)
+                maxLng = Math.max(maxLng, lng)
+                foundValidBounds = true
+                console.log(`[LeafletMap] Updated bounds: lat(${minLat}, ${maxLat}) lng(${minLng}, ${maxLng})`)
+              }
+            }
+          }
+
+          const processCoordinates = (coords: unknown, depth = 0): void => {
+            if (Array.isArray(coords)) {
+              if (depth === 0 && typeof coords[0] === 'number') {
+                processCoordinate(coords)
+              } else {
+                coords.forEach(c => processCoordinates(c, depth + 1))
+              }
+            }
+          }
+
+          processCoordinates(geom.coordinates)
+        })
+      })
+    })
+
+    if (!foundValidBounds || minLat === Infinity) {
+      console.log('[LeafletMap] No valid coordinates found in fallback calculation')
+      return undefined
+    }
+    
+    const result = [[minLat, minLng], [maxLat, maxLng]] as [[number, number], [number, number]]
+    console.log('[LeafletMap] Fallback calculated bounds:', result)
+    return result
+  }
 
   // Tính toán bounds tổng hợp từ tất cả layers visible
   const totalBounds = useMemo(() => {
+    console.log('[LeafletMap] Starting totalBounds calculation')
+    console.log('[LeafletMap] All layerGroups:', layerGroups)
+    
     const visibleGroups = layerGroups.filter(group => group.visible)
-    if (!visibleGroups.length) return undefined
+    console.log('[LeafletMap] Visible groups after filter:', visibleGroups)
+    console.log('[LeafletMap] Calculating totalBounds from visible groups:', visibleGroups.length)
+    
+    if (!visibleGroups.length) {
+      console.log('[LeafletMap] No visible groups, totalBounds = undefined')
+      return undefined
+    }
 
     let minLat = Infinity, minLng = Infinity
     let maxLat = -Infinity, maxLng = -Infinity
+    let foundValidBounds = false
 
-    visibleGroups.forEach(group => {
+    visibleGroups.forEach((group, index) => {
+      console.log(`[LeafletMap] Processing group ${index}:`, {
+        name: group.name,
+        visible: group.visible, 
+        bounds: group.bounds,
+        hasBounds: !!group.bounds
+      })
+      
       if (group.bounds) {
         const [[groupMinLat, groupMinLng], [groupMaxLat, groupMaxLng]] = group.bounds
+        console.log(`[LeafletMap] Group ${index} bounds:`, {
+          min: [groupMinLat, groupMinLng],
+          max: [groupMaxLat, groupMaxLng]
+        })
+        
         minLat = Math.min(minLat, groupMinLat)
         minLng = Math.min(minLng, groupMinLng)
         maxLat = Math.max(maxLat, groupMaxLat)
         maxLng = Math.max(maxLng, groupMaxLng)
+        foundValidBounds = true
+        
+        console.log(`[LeafletMap] Updated bounds so far:`, {
+          min: [minLat, minLng],
+          max: [maxLat, maxLng]
+        })
+      } else {
+        console.warn(`[LeafletMap] Group ${index} has no bounds:`, group.name)
       }
     })
 
-    if (minLat === Infinity) return undefined
-    return [[minLat, minLng], [maxLat, maxLng]] as [[number, number], [number, number]]
+    // Nếu không tìm thấy bounds từ groups, thử tính từ geometry data
+    if (!foundValidBounds || minLat === Infinity) {
+      console.log('[LeafletMap] No valid bounds from groups, trying fallback calculation')
+      return calculateBoundsFromGeometry(layerGroups)
+    }
+    
+    const result = [[minLat, minLng], [maxLat, maxLng]] as [[number, number], [number, number]]
+    console.log('[LeafletMap] Final calculated totalBounds:', result)
+    return result
   }, [layerGroups])
 
   // Render visible layers với memoization
@@ -189,6 +336,8 @@ export const LeafletMap = React.memo<LeafletMapProps>(({
 
   return (
     <div style={{ height, width: '100%' }}>
+
+      
       <MapContainer
         center={[21.0285, 105.8542]} // Hà Nội mặc định
         zoom={10}
@@ -218,11 +367,12 @@ export const LeafletMap = React.memo<LeafletMapProps>(({
         {/* Controller để fit bounds */}
         <MapController bounds={totalBounds} />
         
+        {/* Controller để tự động fit bounds */}
+        <FitBoundsController />
+        
         {/* Render các layers */}
         {visibleLayers}
       </MapContainer>
     </div>
   )
-})
-
-LeafletMap.displayName = 'LeafletMap' 
+} 

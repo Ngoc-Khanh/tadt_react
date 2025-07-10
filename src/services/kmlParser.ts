@@ -10,41 +10,78 @@ interface ParsedKMLResult {
 
 // Calculate bounds từ geometry coordinates
 const calculateBounds = (geometries: GeometryData[]): [[number, number], [number, number]] | undefined => {
-  if (!geometries.length) return undefined
+  console.log('[KMLParser] calculateBounds called with geometries:', geometries.length)
+  
+  if (!geometries.length) {
+    console.log('[KMLParser] No geometries, returning undefined')
+    return undefined
+  }
 
   let minLat = Infinity, minLng = Infinity
   let maxLat = -Infinity, maxLng = -Infinity
 
-  geometries.forEach(geom => {
+  geometries.forEach((geom, index) => {
+    console.log(`[KMLParser] Processing geometry ${index}:`, {
+      type: geom.type,
+      coordinates: geom.coordinates,
+      coordinatesLength: Array.isArray(geom.coordinates) ? geom.coordinates.length : 'not array'
+    })
+    
     const coords = geom.coordinates
 
     const processCoordinate = (coord: number[]) => {
+      console.log('[KMLParser] Processing coordinate:', coord)
       if (coord.length >= 2) {
         const [lng, lat] = coord
-        minLat = Math.min(minLat, lat)
-        minLng = Math.min(minLng, lng)
-        maxLat = Math.max(maxLat, lat)
-        maxLng = Math.max(maxLng, lng)
+        console.log('[KMLParser] Extracted lng/lat:', { lng, lat })
+        if (typeof lng === 'number' && typeof lat === 'number' && !isNaN(lng) && !isNaN(lat)) {
+          minLat = Math.min(minLat, lat)
+          minLng = Math.min(minLng, lng)
+          maxLat = Math.max(maxLat, lat)
+          maxLng = Math.max(maxLng, lng)
+          console.log('[KMLParser] Updated bounds:', { minLat, minLng, maxLat, maxLng })
+        } else {
+          console.warn('[KMLParser] Invalid lng/lat values:', { lng, lat })
+        }
+      } else {
+        console.warn('[KMLParser] Coordinate has insufficient length:', coord)
       }
     }
 
-    const processCoordinates = (coords: any, depth = 0) => {
+    const processCoordinates = (coords: unknown, depth = 0) => {
+      console.log(`[KMLParser] processCoordinates depth ${depth}:`, coords)
+      
       if (Array.isArray(coords)) {
         if (depth === 0 && typeof coords[0] === 'number') {
           // Single coordinate [lng, lat]
+          console.log('[KMLParser] Found single coordinate array')
           processCoordinate(coords)
         } else {
           // Nested arrays
-          coords.forEach(c => processCoordinates(c, depth + 1))
+          console.log('[KMLParser] Found nested arrays, processing each item')
+          coords.forEach((c, i) => {
+            console.log(`[KMLParser] Processing nested item ${i}:`, c)
+            processCoordinates(c, depth + 1)
+          })
         }
+      } else {
+        console.warn('[KMLParser] coords is not an array:', coords)
       }
     }
 
     processCoordinates(coords)
   })
 
-  if (minLat === Infinity) return undefined
-  return [[minLat, minLng], [maxLat, maxLng]]
+  console.log('[KMLParser] Final bounds calculation:', { minLat, minLng, maxLat, maxLng })
+
+  if (minLat === Infinity) {
+    console.log('[KMLParser] No valid coordinates found, returning undefined')
+    return undefined
+  }
+  
+  const result = [[minLat, minLng], [maxLat, maxLng]] as [[number, number], [number, number]]
+  console.log('[KMLParser] Calculated bounds result:', result)
+  return result
 }
 
 // Generate color cho từng loại geometry
@@ -65,7 +102,10 @@ const groupGeometriesByType = (features: GeoJSON.Feature[]): Record<string, Geom
   const groups: Record<string, GeometryData[]> = {}
 
   features.forEach(feature => {
-    if (!feature.geometry) return
+    if (!feature.geometry) {
+      console.log('[KMLParser] Feature has no geometry, skipping')
+      return
+    }
 
     const geomType = feature.geometry.type
     if (!groups[geomType]) {
@@ -84,9 +124,18 @@ const groupGeometriesByType = (features: GeoJSON.Feature[]): Record<string, Geom
       })
     }
 
+    // Type-safe coordinate extraction
+    let coordinates: unknown
+    if ('coordinates' in feature.geometry) {
+      coordinates = feature.geometry.coordinates
+    } else {
+      console.warn('[KMLParser] Geometry has no coordinates property:', feature.geometry)
+      return
+    }
+
     groups[geomType].push({
       type: geomType as GeometryData['type'],
-      coordinates: feature.geometry.coordinates as any,
+      coordinates: coordinates as number[] | number[][] | number[][][], // Proper coordinate type
       properties
     })
   })
@@ -117,7 +166,7 @@ const parseKMLContent = async (xmlContent: string, fileName: string): Promise<Pa
     console.log(`[KMLParser] Successfully parsed ${geoJson.features.length} features from ${fileName}`)
 
     // Group geometries by type
-    const geometryGroups = groupGeometriesByType(geoJson.features)
+    const geometryGroups = groupGeometriesByType(geoJson.features.filter(f => f.geometry !== null) as GeoJSON.Feature<GeoJSON.Geometry>[])
     
     // Create layers for each geometry type
     const layers: LayerData[] = []
@@ -182,7 +231,7 @@ const parseKMZContent = async (file: File): Promise<ParsedKMLResult> => {
       throw new Error('No KML file found in KMZ archive')
     }
 
-    const kmlContent = await kmlFile.async('text')
+    const kmlContent = await (kmlFile as JSZip.JSZipObject).async('text')
     return parseKMLContent(kmlContent, file.name)
 
   } catch (error) {

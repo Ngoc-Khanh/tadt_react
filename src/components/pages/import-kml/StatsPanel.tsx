@@ -1,7 +1,7 @@
 import {
   layerGroupsAtom,
   pendingFilesAtom,
-  showMapAtom,
+  showMapWithFitBoundsAtom,
   successfulFilesAtom
 } from '@/stores/importKMLAtoms'
 import { Layers, Map } from '@mui/icons-material'
@@ -23,7 +23,7 @@ export function StatsPanel() {
   const [successfulFiles] = useAtom(successfulFilesAtom)
   const [pendingFiles] = useAtom(pendingFilesAtom)
   const [layerGroups] = useAtom(layerGroupsAtom)
-  const setShowMap = useSetAtom(showMapAtom)
+  const showMapWithFitBounds = useSetAtom(showMapWithFitBoundsAtom)
 
   return (
     <Box sx={{ flex: '0 0 30%' }}>
@@ -63,7 +63,7 @@ export function StatsPanel() {
               variant="contained"
               size="large"
               startIcon={<Map />}
-              onClick={() => setShowMap(true)}
+              onClick={() => showMapWithFitBounds()}
               disabled={pendingFiles.length > 0}
             >
               Xem bản đồ

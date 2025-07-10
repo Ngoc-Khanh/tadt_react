@@ -4,13 +4,15 @@ import { useAtom, useSetAtom } from 'jotai'
 import { useState } from 'react'
 import { layerGroupsAtom, showMapAtom, successfulFilesAtom } from '../../../stores/importKMLAtoms'
 import { LayerPanel } from './LayerPanel'
-import { LazyLeafletMap } from './LazyLeafletMap'
+import { LeafletMap } from './LeafletMap'
 
 export function MapView() {
   const [layerGroups] = useAtom(layerGroupsAtom)
   const [successfulFiles] = useAtom(successfulFilesAtom)
   const setShowMap = useSetAtom(showMapAtom)
   const [showLayerPanel, setShowLayerPanel] = useState(true)
+
+
 
   // Tính tổng số features
   const totalFeatures = layerGroups.reduce((total, group) =>
@@ -157,108 +159,52 @@ export function MapView() {
             marginRight: showLayerPanel ? 0 : 0
           }}
         >
-          {layerGroups.length > 0 ? (
-            <Box sx={{ position: 'relative', height: '100%' }}>
-              <LazyLeafletMap
-                layerGroups={layerGroups}
-                height="100%"
-                onLayoutChange={showLayerPanel}
-              />
+          <Box sx={{ position: 'relative', height: '100%' }}>
+            <LeafletMap
+              layerGroups={layerGroups}
+              height="100%"
+              onLayoutChange={showLayerPanel}
+            />
 
-              {/* Floating Layer Toggle - only show when panel is hidden and we have layers */}
-              {!showLayerPanel && (
-                <Box
-                  sx={{
-                    position: 'absolute',
-                    top: 16,
-                    right: 16,
-                    zIndex: 1000,
-                    animation: 'slideInFromRight 0.3s ease-out'
-                  }}
-                >
-                  <Tooltip title="Hiển thị bảng điều khiển layers">
-                    <Button
-                      onClick={() => setShowLayerPanel(true)}
-                      variant="contained"
-                      size="small"
-                      startIcon={<Layers />}
-                      sx={{
-                        borderRadius: 2,
-                        boxShadow: 3,
-                        bgcolor: 'primary.main',
-                        color: 'white',
-                        textTransform: 'none',
-                        fontWeight: 600,
-                        px: 2,
-                        '&:hover': {
-                          bgcolor: 'primary.dark',
-                          boxShadow: 4,
-                          transform: 'scale(1.05)'
-                        },
-                        transition: 'all 0.2s ease-in-out'
-                      }}
-                    >
-                      Layers ({layerGroups.length})
-                    </Button>
-                  </Tooltip>
-                </Box>
-              )}
-            </Box>
-          ) : (
-            <Box
-              sx={{
-                flexGrow: 1,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                bgcolor: 'grey.50',
-                minHeight: '500px',
-                backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(0,0,0,.15) 1px, transparent 0)',
-                backgroundSize: '20px 20px'
-              }}
-            >
-              <Box sx={{ textAlign: 'center', p: 4 }}>
-                <Box
-                  sx={{
-                    width: 120,
-                    height: 120,
-                    borderRadius: '50%',
-                    bgcolor: 'primary.50',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    mx: 'auto',
-                    mb: 3
-                  }}
-                >
-                  <Map sx={{ fontSize: 60, color: 'primary.main' }} />
-                </Box>
-
-                <Typography variant="h4" gutterBottom fontWeight="bold" color="text.primary">
-                  Bản đồ tương tác
-                </Typography>
-                <Typography variant="h6" color="text.secondary" sx={{ mb: 2 }}>
-                  Powered by Leaflet & CARTO
-                </Typography>
-                <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 400, mx: 'auto' }}>
-                  Chưa có dữ liệu để hiển thị. Hãy import file KML/KMZ để xem bản đồ với các layer địa lý.
-                </Typography>
-
-                <Button
-                  variant="outlined"
-                  startIcon={<CloudUpload />}
-                  onClick={() => setShowMap(false)}
-                  sx={{
-                    mt: 3,
-                    borderRadius: 2,
-                    textTransform: 'none'
-                  }}
-                >
-                  Import File KML/KMZ
-                </Button>
+            {/* Floating Layer Toggle - only show when panel is hidden and we have layers */}
+            {!showLayerPanel && (
+              <Box
+                sx={{
+                  position: 'absolute',
+                  top: 16,
+                  right: 16,
+                  zIndex: 1000,
+                  animation: 'slideInFromRight 0.3s ease-out'
+                }}
+              >
+                <Tooltip title="Hiển thị bảng điều khiển layers">
+                  <Button
+                    onClick={() => setShowLayerPanel(true)}
+                    variant="contained"
+                    size="small"
+                    startIcon={<Layers />}
+                    sx={{
+                      borderRadius: 2,
+                      boxShadow: 3,
+                      bgcolor: 'primary.main',
+                      color: 'white',
+                      textTransform: 'none',
+                      fontWeight: 600,
+                      px: 2,
+                      '&:hover': {
+                        bgcolor: 'primary.dark',
+                        boxShadow: 4,
+                        transform: 'scale(1.05)'
+                      },
+                      transition: 'all 0.2s ease-in-out'
+                    }}
+                  >
+                    Layers ({layerGroups.length})
+                  </Button>
+                </Tooltip>
               </Box>
-            </Box>
-          )}
+            )}
+          </Box>
         </Paper>
 
         {/* Layers Panel */}
