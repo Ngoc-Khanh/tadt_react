@@ -14,7 +14,7 @@ export interface IMapResponse {
   trang_thai: EStatusType;
   ngay_cap_nhat: string;
   tien_do_thuc_te: number;
-  anh_tong_quan: string;
+  anh_tong_quan?: string;
 }
 
 export interface IMapDetailResponse {

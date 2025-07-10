@@ -1,1 +1,79 @@
 @import "tailwindcss";
+
+/* Leaflet popup customization */
+.leaflet-popup-content-wrapper {
+  border-radius: 12px !important;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.15) !important;
+  border: none !important;
+  padding: 0 !important;
+}
+
+.leaflet-popup-tip {
+  background: white !important;
+  border: none !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
+}
+
+.custom-popup .leaflet-popup-content {
+  margin: 10px !important;
+  font-family: 'Roboto', 'Helvetica', 'Arial', sans-serif !important;
+}
+
+.leaflet-popup-close-button {
+  color: #666 !important;
+  font-size: 18px !important;
+  padding: 8px !important;
+  width: auto !important;
+  height: auto !important;
+  border-radius: 50% !important;
+  background: rgba(255,255,255,0.9) !important;
+  right: 8px !important;
+  top: 8px !important;
+}
+
+.leaflet-popup-close-button:hover {
+  background: rgba(255,255,255,1) !important;
+  color: #333 !important;
+}
+
+/* Enhanced map controls */
+.leaflet-control-zoom a {
+  border-radius: 8px !important;
+  border: none !important;
+  background: rgba(255,255,255,0.95) !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
+  color: #333 !important;
+  font-weight: bold !important;
+}
+
+.leaflet-control-zoom a:hover {
+  background: white !important;
+  color: #1976d2 !important;
+}
+
+.leaflet-control-attribution {
+  background: rgba(255,255,255,0.8) !important;
+  border-radius: 8px !important;
+  margin: 8px !important;
+  font-size: 11px !important;
+}
+
+/* Custom loading animation */
+@keyframes mapLoad {
+  0% { opacity: 0; transform: scale(0.95); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes slideInFromRight {
+  0% { opacity: 0; transform: translateX(100%); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slideOutToRight {
+  0% { opacity: 1; transform: translateX(0); }
+  100% { opacity: 0; transform: translateX(100%); }
+}
+
+.leaflet-container {
+  animation: mapLoad 0.3s ease-out;
+}

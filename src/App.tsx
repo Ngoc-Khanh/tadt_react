@@ -1,4 +1,4 @@
-import RouterProvider from "@/providers/route.provider";
+import { AtomsProvider, RouterProvider } from "@/providers";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 
@@ -23,7 +23,9 @@ function App() {
   
   return (
     <QueryClientProvider client={queryClient}>
-      <RouterProvider />
+      <AtomsProvider>
+        <RouterProvider />
+      </AtomsProvider>
     </QueryClientProvider>
   )
 }
