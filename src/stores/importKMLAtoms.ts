@@ -1,5 +1,5 @@
 import { atom } from 'jotai'
-import type { IMapResponse } from '@/constants/interfaces'
+import type { IMapResponse, IPackageResponse } from '@/constants/interfaces'
 
 export interface ImportedFile {
   id: string
@@ -38,6 +38,15 @@ export interface SnackbarState {
   message: string
 }
 
+// Package selection interface
+export interface SelectedLineString {
+  featureId: string | number
+  layerId: string
+  groupId: string
+  properties?: Record<string, string | number | boolean>
+  geometry?: GeometryData
+}
+
 // Atoms
 export const filesAtom = atom<ImportedFile[]>([])
 export const layerGroupsAtom = atom<LayerGroup[]>([])
@@ -49,6 +58,27 @@ export const manualBoundsAtom = atom<[[number, number], [number, number]] | unde
 
 // Project selection atoms
 export const selectedProjectAtom = atom<IMapResponse | null>(null)
+
+// Package selection atoms
+export const selectedLineStringAtom = atom<SelectedLineString | null>(null)
+export const selectedPackageAtom = atom<IPackageResponse | null>(null)
+export const showPackageSelectionDialogAtom = atom<boolean>(false)
+
+// Package assignments tracking
+export interface PackageAssignment {
+  id: string
+  lineStringId: string | number
+  packageId: string
+  packageName: string
+  layerId: string
+  groupId: string
+  groupName: string
+  layerName: string
+  timestamp: string
+}
+
+export const packageAssignmentsAtom = atom<PackageAssignment[]>([])
+export const showConfirmImportDialogAtom = atom<boolean>(false)
 
 // Derived atoms
 export const successfulFilesAtom = atom((get) => 
@@ -109,6 +139,145 @@ export const setSelectedProjectAtom = atom(
   (get, set, project: IMapResponse | null) => {
     set(selectedProjectAtom, project)
     console.log('[setSelectedProjectAtom] Selected project:', project?.ten_du_an || 'None')
+  }
+)
+
+// Package selection actions
+export const setSelectedLineStringAtom = atom(
+  null,
+  (get, set, lineString: SelectedLineString | null) => {
+    set(selectedLineStringAtom, lineString)
+    if (lineString) {
+      console.log('[setSelectedLineStringAtom] Selected LineString:', lineString)
+      set(showPackageSelectionDialogAtom, true)
+    }
+  }
+)
+
+export const setSelectedPackageAtom = atom(
+  null,
+  (get, set, packageData: IPackageResponse | null) => {
+    set(selectedPackageAtom, packageData)
+    console.log('[setSelectedPackageAtom] Selected package:', packageData?.ten_goi_thau || 'None')
+  }
+)
+
+export const assignPackageToLineStringAtom = atom(
+  null,
+  (get, set) => {
+    const selectedLineString = get(selectedLineStringAtom)
+    const selectedPackage = get(selectedPackageAtom)
+    const layerGroups = get(layerGroupsAtom)
+    
+    if (selectedLineString && selectedPackage) {
+      // Tìm thông tin group và layer name
+      const group = layerGroups.find(g => g.id === selectedLineString.groupId)
+      const layer = group?.layers.find(l => l.id === selectedLineString.layerId)
+      
+      // Tạo assignment object
+      const assignment: PackageAssignment = {
+        id: `${selectedLineString.groupId}-${selectedLineString.layerId}-${selectedLineString.featureId}`,
+        lineStringId: selectedLineString.featureId,
+        packageId: selectedPackage.package_id,
+        packageName: selectedPackage.ten_goi_thau,
+        layerId: selectedLineString.layerId,
+        groupId: selectedLineString.groupId,
+        groupName: group?.name || 'Unknown Group',
+        layerName: layer?.name || 'Unknown Layer',
+        timestamp: new Date().toISOString()
+      }
+      
+      // Thêm assignment vào list (hoặc update nếu đã tồn tại)
+      const currentAssignments = get(packageAssignmentsAtom)
+      const existingIndex = currentAssignments.findIndex(a => a.id === assignment.id)
+      
+      if (existingIndex >= 0) {
+        // Update existing assignment
+        const updatedAssignments = [...currentAssignments]
+        updatedAssignments[existingIndex] = assignment
+        set(packageAssignmentsAtom, updatedAssignments)
+      } else {
+        // Add new assignment
+        set(packageAssignmentsAtom, [...currentAssignments, assignment])
+      }
+      
+      console.log('[assignPackageToLineStringAtom] Package assigned:', assignment)
+      
+      // Reset selection và đóng dialog
+      set(selectedLineStringAtom, null)
+      set(selectedPackageAtom, null)
+      set(showPackageSelectionDialogAtom, false)
+      
+      // Show success message
+      set(snackbarAtom, { 
+        open: true, 
+        message: `Đã gán gói thầu "${selectedPackage.ten_goi_thau}" thành công!` 
+      })
+    }
+  }
+)
+
+export const closePackageSelectionDialogAtom = atom(
+  null,
+  (get, set) => {
+    set(showPackageSelectionDialogAtom, false)
+    set(selectedLineStringAtom, null)
+    set(selectedPackageAtom, null)
+  }
+)
+
+// Confirm import actions
+export const showConfirmImportDialogActionAtom = atom(
+  null,
+  (get, set) => {
+    set(showConfirmImportDialogAtom, true)
+  }
+)
+
+export const closeConfirmImportDialogAtom = atom(
+  null,
+  (get, set) => {
+    set(showConfirmImportDialogAtom, false)
+  }
+)
+
+// Note: This atom should be used with async wrapper since we can't make atoms async directly
+export const confirmImportToMapAtom = atom(
+  null,
+  (get, set) => {
+    const assignments = get(packageAssignmentsAtom)
+    const selectedProject = get(selectedProjectAtom)
+    const layerGroups = get(layerGroupsAtom)
+    
+    if (!selectedProject) {
+      set(snackbarAtom, { 
+        open: true, 
+        message: 'Vui lòng chọn dự án trước khi import!' 
+      })
+      return
+    }
+    
+    // Return data for external async handling
+    return {
+      project_id: selectedProject.project_id,
+      assignments,
+      layer_groups: layerGroups
+    }
+  }
+)
+
+// Action to clear data after successful import
+export const clearImportDataAtom = atom(
+  null,
+  (get, set) => {
+    // Clear all import data
+    set(filesAtom, [])
+    set(layerGroupsAtom, [])
+    set(packageAssignmentsAtom, [])
+    set(selectedProjectAtom, null)
+    set(showConfirmImportDialogAtom, false)
+    
+    console.log('[clearImportDataAtom] Import data cleared')
   }
 )
 

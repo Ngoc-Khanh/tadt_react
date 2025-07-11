@@ -2,8 +2,13 @@ import React, { useMemo, useCallback, useEffect, useRef } from 'react'
 import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet'
 import { LatLngBounds, Map as LeafletMapType } from 'leaflet'
 import { useAtom, useSetAtom } from 'jotai'
-import { shouldFitBoundsAtom, clearFitBoundsAtom, manualBoundsAtom } from '../../../stores/importKMLAtoms'
-import type { LayerGroup, GeometryData, LayerData } from '../../../stores/importKMLAtoms'
+import { 
+  shouldFitBoundsAtom, 
+  clearFitBoundsAtom, 
+  manualBoundsAtom,
+  setSelectedLineStringAtom
+} from '../../../stores/importKMLAtoms'
+import type { LayerGroup, GeometryData, LayerData, SelectedLineString } from '../../../stores/importKMLAtoms'
 import 'leaflet/dist/leaflet.css'
 
 // Component để handle map resize
@@ -132,11 +137,15 @@ const convertToGeoJSON = (geometry: GeometryData[]): GeoJSON.FeatureCollection =
 // Component render từng layer với memoization
 const LayerRenderer = React.memo(({ 
   layer, 
-  groupVisible 
+  groupVisible,
+  groupId 
 }: { 
   layer: LayerData, 
-  groupVisible: boolean 
+  groupVisible: boolean,
+  groupId: string
 }) => {
+  const setSelectedLineString = useSetAtom(setSelectedLineStringAtom)
+  
   const geoJsonData = useMemo(() => {
     if (!layer.visible || !groupVisible || !layer.geometry?.length) {
       return null
@@ -153,7 +162,8 @@ const LayerRenderer = React.memo(({
     dashArray: layer.name.includes('Line') ? '5, 5' : undefined
   }), [layer.color, layer.name])
 
-  const onEachFeature = useCallback((feature: GeoJSON.Feature, layer: L.Layer) => {
+  const onEachFeature = useCallback((feature: GeoJSON.Feature, leafletLayer: L.Layer) => {
+    // Bind popup với thông tin feature
     if (feature.properties && Object.keys(feature.properties).length > 0) {
       const entries = Object.entries(feature.properties)
       const popupContent = `
@@ -172,12 +182,39 @@ const LayerRenderer = React.memo(({
         </div>
       `
       
-      layer.bindPopup(popupContent, {
+      leafletLayer.bindPopup(popupContent, {
         maxWidth: 350,
         className: 'custom-popup'
       })
     }
-  }, [])
+
+    // Handle click event cho LineString
+    leafletLayer.on('click', (e) => {
+      // Chỉ xử lý cho LineString
+      if (feature.geometry?.type === 'LineString') {
+        console.log('[LayerRenderer] LineString clicked:', feature)
+        
+        // Tạo SelectedLineString object
+        const selectedLineString: SelectedLineString = {
+          featureId: feature.id || `${groupId}-${layer.id}-${Date.now()}`,
+          layerId: layer.id,
+          groupId: groupId,
+          properties: feature.properties || {},
+          geometry: {
+            type: feature.geometry.type as 'LineString',
+            coordinates: feature.geometry.coordinates,
+            properties: feature.properties || {}
+          }
+        }
+        
+        // Set selected LineString để trigger package selection dialog
+        setSelectedLineString(selectedLineString)
+        
+        // Prevent event bubbling
+        e.originalEvent.stopPropagation()
+      }
+    })
+  }, [layer.id, groupId, setSelectedLineString])
 
   if (!geoJsonData) return null
 
@@ -329,6 +366,7 @@ export const LeafletMap = ({
             key={layer.id}
             layer={layer}
             groupVisible={group.visible}
+            groupId={group.id}
           />
         ))
       )

@@ -1,11 +1,13 @@
-import { Layers } from '@mui/icons-material'
-import { Backdrop, Box, Button, Fade, Popper, Typography } from "@mui/material"
+import { Layers, Refresh } from '@mui/icons-material'
+import { Backdrop, Box, Button, Fade, Popper, Typography, CircularProgress, Alert } from "@mui/material"
 import type { LatLngExpression, LeafletMouseEvent } from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import React, { memo, useCallback, useMemo, useState } from 'react'
-import { MapContainer, Polygon, TileLayer, useMapEvents } from 'react-leaflet'
+import { MapContainer, Polygon, TileLayer, useMapEvents, GeoJSON } from 'react-leaflet'
 import AccordionUsage from './map/AccordionUsage'
 import RightPanel from './map/RightPanel'
+import { useImportedData } from '@/hooks/useImportedData'
+import type { ImportedLayerData } from '@/services/assignment.api'
 
 // Sample polygon data - moved outside component to avoid recreation
 const samplePolygon = {
@@ -83,6 +85,110 @@ const MemoizedPolygon = memo(({ onClick }: { onClick: () => void }) => {
 
 MemoizedPolygon.displayName = 'MemoizedPolygon'
 
+// Component để render imported data
+const ImportedDataRenderer = memo(({ 
+  importedDataList, 
+  onFeatureClick 
+}: { 
+  importedDataList: ImportedLayerData[]
+  onFeatureClick: (data: ImportedLayerData, featureId: string) => void
+}) => {
+  if (!importedDataList.length) return null
+
+  return (
+    <>
+      {importedDataList.map((importData) => 
+        importData.layer_groups.map((group) =>
+          group.layers.map((layer) => {
+            if (!layer.visible || !layer.geometry?.length) return null
+
+            // Convert geometry to GeoJSON
+            const geoJsonData = {
+              type: 'FeatureCollection' as const,
+              features: layer.geometry.map((geom, index) => ({
+                type: 'Feature' as const,
+                id: `${importData.import_id}-${group.id}-${layer.id}-${index}`,
+                properties: {
+                  ...geom.properties,
+                  importId: importData.import_id,
+                  projectName: importData.project_name,
+                  groupName: group.name,
+                  layerName: layer.name,
+                  // Find assigned package for this feature
+                  assignedPackage: importData.assignments.find(a => 
+                    a.groupId === group.id && 
+                    a.layerId === layer.id && 
+                    a.lineStringId === index
+                  )
+                },
+                geometry: {
+                  type: geom.type,
+                  coordinates: geom.coordinates
+                } as GeoJSON.Geometry
+              }))
+            }
+
+            return (
+              <GeoJSON
+                key={`${importData.import_id}-${group.id}-${layer.id}`}
+                data={geoJsonData}
+                style={() => ({
+                  color: layer.color,
+                  weight: 3,
+                  opacity: 0.8,
+                  fillOpacity: 0.3,
+                  fillColor: layer.color
+                })}
+                onEachFeature={(feature, leafletLayer) => {
+                  const props = feature.properties
+                  const assignedPackage = props?.assignedPackage
+
+                  // Popup content
+                  const popupContent = `
+                    <div style="font-family: 'Roboto', sans-serif; max-width: 300px;">
+                      <div style="background: linear-gradient(135deg, #1976d2, #1565c0); color: white; padding: 12px; margin: -10px -10px 10px -10px; border-radius: 8px 8px 0 0;">
+                        <h4 style="margin: 0; font-size: 14px; font-weight: 600;">Dữ liệu đã import</h4>
+                      </div>
+                      <div style="padding: 4px 0;">
+                        <div style="margin: 8px 0; padding: 6px; background: #e3f2fd; border-radius: 4px;">
+                          <strong style="color: #1976d2;">Dự án:</strong> ${props?.projectName || 'N/A'}<br>
+                          <strong style="color: #1976d2;">Layer:</strong> ${props?.layerName || 'N/A'}
+                        </div>
+                        ${assignedPackage ? `
+                          <div style="margin: 8px 0; padding: 6px; background: #f3e5f5; border-radius: 4px; border-left: 3px solid #9c27b0;">
+                            <strong style="color: #9c27b0;">Gói thầu:</strong><br>
+                            <span style="color: #333; font-size: 13px;">${assignedPackage.packageName}</span>
+                          </div>
+                        ` : `
+                          <div style="margin: 8px 0; padding: 6px; background: #fff3e0; border-radius: 4px; border-left: 3px solid #ff9800;">
+                            <span style="color: #f57c00; font-size: 12px;">Chưa gán gói thầu</span>
+                          </div>
+                        `}
+                      </div>
+                    </div>
+                  `
+
+                  leafletLayer.bindPopup(popupContent, {
+                    maxWidth: 350,
+                    className: 'custom-popup'
+                  })
+
+                  // Click handler
+                  leafletLayer.on('click', () => {
+                    onFeatureClick(importData, feature.id?.toString() || '')
+                  })
+                }}
+              />
+            )
+          })
+        )
+      )}
+    </>
+  )
+})
+
+ImportedDataRenderer.displayName = 'ImportedDataRenderer'
+
 export function MapSection() {
   // Tọa độ trung tâm Việt Nam
   const vietnamCenter: LatLngExpression = useMemo(() => [14.0583, 108.2772], [])
@@ -95,6 +201,17 @@ export function MapSection() {
 
   // State cho Right Panel
   const [rightPanelOpen, setRightPanelOpen] = useState(false)
+  
+  // State cho imported data
+  const [selectedImportData, setSelectedImportData] = useState<ImportedLayerData | null>(null)
+  
+  // Fetch imported data
+  const {
+    data: importedDataList = [],
+    isLoading: isLoadingImported,
+    error: importedError,
+    refetch: refetchImported
+  } = useImportedData()
 
   // Memoized handlers to prevent recreation
   const handleClick = useCallback((event: React.MouseEvent<HTMLElement>) => {
@@ -114,6 +231,12 @@ export function MapSection() {
   const handleRightPanelClose = useCallback(() => {
     setRightPanelOpen(false)
   }, [])
+
+  const handleImportedFeatureClick = useCallback((data: ImportedLayerData, featureId: string) => {
+    setSelectedImportData(data)
+    setRightPanelOpen(true)
+    console.log('[MapSection] Imported feature clicked:', { data, featureId })
+  }, [setSelectedImportData, setRightPanelOpen])
 
   // Memoized button styles
   const buttonStyles = useMemo(() => ({
@@ -182,7 +305,59 @@ export function MapSection() {
         >
           <Layers fontSize="medium" />
         </Button>
+
+        {/* Refresh Button for Imported Data */}
+        <Button
+          onClick={() => refetchImported()}
+          variant="outlined"
+          disabled={isLoadingImported}
+          sx={{
+            minWidth: 48,
+            width: 48,
+            height: 48,
+            borderRadius: 3,
+            bgcolor: 'background.paper',
+            color: 'text.primary',
+            border: '1px solid',
+            borderColor: 'divider',
+            boxShadow: 2,
+            '&:hover': {
+              bgcolor: 'grey.100',
+              transform: 'translateY(-1px)',
+              boxShadow: 3
+            },
+            transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+          }}
+        >
+          {isLoadingImported ? (
+            <CircularProgress size={20} />
+          ) : (
+            <Refresh fontSize="medium" />
+          )}
+        </Button>
       </Box>
+
+      {/* Error Alert for imported data */}
+      {importedError && (
+        <Alert 
+          severity="error" 
+          sx={{ 
+            position: 'absolute',
+            top: 80,
+            left: 16,
+            right: 16,
+            zIndex: 1000,
+            maxWidth: 400
+          }}
+          action={
+            <Button color="inherit" size="small" onClick={() => refetchImported()}>
+              Thử lại
+            </Button>
+          }
+        >
+          Lỗi khi tải dữ liệu đã import: {importedError.message}
+        </Alert>
+      )}
 
       {/* Backdrop for mobile overlay */}
       <Backdrop
@@ -299,6 +474,12 @@ export function MapSection() {
         {/* Optimized Polygon */}
         <MemoizedPolygon onClick={handlePolygonClick} />
 
+        {/* Imported Data Renderer */}
+        <ImportedDataRenderer 
+          importedDataList={importedDataList}
+          onFeatureClick={handleImportedFeatureClick}
+        />
+
         {/* Map Event Handler */}
         <MapEventHandler />
       </MapContainer>
@@ -307,6 +488,7 @@ export function MapSection() {
       <RightPanel
         open={rightPanelOpen}
         onClose={handleRightPanelClose}
+        importedData={selectedImportData}
       />
     </Box>
   )

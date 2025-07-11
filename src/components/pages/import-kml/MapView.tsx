@@ -1,16 +1,27 @@
-import { CloudUpload, KeyboardArrowLeft, Layers, Map } from '@mui/icons-material'
-import { Box, Button, Chip, Divider, IconButton, Paper, Tooltip, Typography } from '@mui/material'
+import { CloudUpload, KeyboardArrowLeft, Layers, Map, Upload } from '@mui/icons-material'
+import { Box, Button, Chip, Divider, IconButton, Paper, Tooltip, Typography, Badge } from '@mui/material'
 import { useAtom, useSetAtom } from 'jotai'
 import { useState } from 'react'
-import { layerGroupsAtom, showMapAtom, successfulFilesAtom } from '../../../stores/importKMLAtoms'
+import { 
+  layerGroupsAtom, 
+  showMapAtom, 
+  successfulFilesAtom,
+  packageAssignmentsAtom,
+  showConfirmImportDialogActionAtom 
+} from '../../../stores/importKMLAtoms'
 import { LayerPanel } from './LayerPanel'
 import { LeafletMap } from './LeafletMap'
+import { PackageSelectionDialog } from './PackageSelectionDialog'
+import { ConfirmImportDialog } from './ConfirmImportDialog'
 
 export function MapView() {
   const [layerGroups] = useAtom(layerGroupsAtom)
   const [successfulFiles] = useAtom(successfulFilesAtom)
+  const [packageAssignments] = useAtom(packageAssignmentsAtom)
   const setShowMap = useSetAtom(showMapAtom)
+  const showConfirmImportDialog = useSetAtom(showConfirmImportDialogActionAtom)
   const [showLayerPanel, setShowLayerPanel] = useState(true)
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false)
 
 
 
@@ -81,6 +92,14 @@ export function MapView() {
                 color="info"
                 variant="outlined"
               />
+              {packageAssignments.length > 0 && (
+                <Chip
+                  label={`${packageAssignments.length} Gói thầu đã gán`}
+                  size="small"
+                  color="warning"
+                  variant="filled"
+                />
+              )}
             </Box>
           </Box>
         </Box>
@@ -118,6 +137,41 @@ export function MapView() {
           </Tooltip>
 
           <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
+
+          {/* Import to Map Button */}
+          <Tooltip title="Import dữ liệu đã gán gói thầu vào bản đồ chính">
+            <Badge 
+              badgeContent={packageAssignments.length} 
+              color="success" 
+              showZero={false}
+              max={99}
+            >
+              <Button
+                variant="outlined"
+                startIcon={<Upload />}
+                onClick={() => setConfirmDialogOpen(true)}
+                disabled={packageAssignments.length === 0}
+                sx={{
+                  px: 3,
+                  borderRadius: 2,
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  borderColor: 'success.main',
+                  color: 'success.main',
+                  '&:hover': {
+                    borderColor: 'success.dark',
+                    bgcolor: 'success.50'
+                  },
+                  '&:disabled': {
+                    borderColor: 'grey.300',
+                    color: 'grey.400'
+                  }
+                }}
+              >
+                Import vào Map
+              </Button>
+            </Badge>
+          </Tooltip>
 
           <Button
             variant="contained"
@@ -228,6 +282,27 @@ export function MapView() {
           </Box>
         </Box>
       </Box>
+
+      {/* Package Selection Dialog */}
+      <PackageSelectionDialog />
+
+      {/* Confirm Import Dialog */}
+      <ConfirmImportDialog
+        open={confirmDialogOpen}
+        onClose={() => setConfirmDialogOpen(false)}
+        onConfirm={() => {
+          // Close dialog và navigate hoặc refresh
+          setConfirmDialogOpen(false)
+          showConfirmImportDialog()
+          // Có thể navigate về mapSection hoặc thực hiện logic khác
+        }}
+        assignedPackages={packageAssignments.map(assignment => ({
+          lineStringId: assignment.lineStringId.toString(),
+          packageName: assignment.packageName,
+          groupName: assignment.groupName,
+          layerName: assignment.layerName
+        }))}
+      />
     </Box>
   )
 } 
