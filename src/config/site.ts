@@ -6,7 +6,7 @@ export const siteConfig = {
   backend: {
     base_url: import.meta.env.VITE_API_URL || 'http://localhost:8080',
     base_headers: {
-      'Content-Type': 'application/json',
+      'Content-Type': 'application/json'
     }
   }
 }

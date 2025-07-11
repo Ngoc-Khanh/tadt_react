@@ -13,15 +13,32 @@ api.interceptors.request.use(
   async (config) => {
     const token = await getAccessToken();
     if (token) config.headers.Authorization = `Bearer ${token}`;
-    config.headers.Authorization = `Bearer eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1lIjoibWFwc2FwaSIsIm9yZ2lkIjoiIiwiaWF0Ijo2Mzg4NzczMDM5MjUxODQzOTEsInVzZXJpZCI6ImIyNDM4ZTAxLTZmYjItNDc5Ni05NDFjLWQwNWMyZWNiNDhkNSIsInVzZXJuYW1lIjoibWFwc2FwaSIsImZ1bGxuYW1lIjoiTWFwcyBBUEkiLCJvcmdjb2RlIjoiIiwib3JnbmFtZSI6IiIsImV4cCI6MTc1MjE2Njc5OX0.7zgegNyI7uAcRYq54BcyISRWUKTEeSZgUrGB5oGK9EIAXJXW03f-L2MEs8KPjqbW6sBZNw6ie6tT3hQOuIqQpg`;
+    console.log(`[API] ${config.method?.toUpperCase()} ${config.url}`, { 
+      baseURL: config.baseURL,
+      headers: config.headers 
+    });
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => {
+    console.error('[API] Request error:', error);
+    return Promise.reject(error);
+  }
 )
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    console.log(`[API] Response ${response.status}:`, response.config.url);
+    return response;
+  },
   async (error) => {
+    console.error('[API] Response error:', {
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      url: error.config?.url,
+      data: error.response?.data,
+      message: error.message
+    });
+
     if (error.response?.status === 401) {
       console.log('[API] Token expired, attempting auto re-login');
       try {

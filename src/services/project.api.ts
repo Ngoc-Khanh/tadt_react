@@ -4,7 +4,7 @@ import { apiGet } from "./api"
 
 export const ProjectAPI = {
   async ProjectList() {
-    const res = await apiGet<SRO<IMapResponse[]>>('/Maps/projects')
+    const res = await apiGet<SRO<IMapResponse[]>>('/api/Maps/projects')
     return res.data
   }
 }

@@ -5,7 +5,7 @@ import { apiPost } from "@/services/api";
 
 export const AuthAPI = {
   async login(credentials: LoginDto) {
-    const res = await apiPost<LoginDto, SRO<ICredentialResponse>>("/User/Login", credentials);
+    const res = await apiPost<LoginDto, SRO<ICredentialResponse>>("/api/User/Login", credentials);
     return res.data.Data;
   }
 }

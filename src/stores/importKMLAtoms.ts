@@ -1,4 +1,5 @@
 import { atom } from 'jotai'
+import type { IMapResponse } from '@/constants/interfaces'
 
 export interface ImportedFile {
   id: string
@@ -46,6 +47,9 @@ export const dragActiveAtom = atom<boolean>(false)
 export const shouldFitBoundsAtom = atom<boolean>(false)
 export const manualBoundsAtom = atom<[[number, number], [number, number]] | undefined>(undefined)
 
+// Project selection atoms
+export const selectedProjectAtom = atom<IMapResponse | null>(null)
+
 // Derived atoms
 export const successfulFilesAtom = atom((get) => 
   get(filesAtom).filter(f => f.status === 'success')
@@ -58,6 +62,14 @@ export const pendingFilesAtom = atom((get) =>
 export const errorFilesAtom = atom((get) => 
   get(filesAtom).filter(f => f.status === 'error')
 )
+
+// Derived atom to check if user can view map (must have selected project + successful files)
+export const canViewMapAtom = atom((get) => {
+  const selectedProject = get(selectedProjectAtom)
+  const successfulFiles = get(successfulFilesAtom)
+  
+  return selectedProject !== null && successfulFiles.length > 0
+})
 
 // Actions
 export const addFilesAtom = atom(
@@ -89,6 +101,14 @@ export const clearAllFilesAtom = atom(
   null,
   (get, set) => {
     set(filesAtom, [])
+  }
+)
+
+export const setSelectedProjectAtom = atom(
+  null,
+  (get, set, project: IMapResponse | null) => {
+    set(selectedProjectAtom, project)
+    console.log('[setSelectedProjectAtom] Selected project:', project?.ten_du_an || 'None')
   }
 )
 
@@ -146,6 +166,25 @@ export const showMapWithFitBoundsAtom = atom(
   null,
   (get, set) => {
     console.log('[showMapWithFitBoundsAtom] Triggering show map with fit bounds')
+    
+    // Kiểm tra điều kiện trước khi hiển thị map
+    const canViewMap = get(canViewMapAtom)
+    if (!canViewMap) {
+      const selectedProject = get(selectedProjectAtom)
+      const successfulFiles = get(successfulFilesAtom)
+      
+      let errorMessage = ''
+      if (!selectedProject) {
+        errorMessage = 'Vui lòng chọn dự án trước khi xem bản đồ'
+      } else if (successfulFiles.length === 0) {
+        errorMessage = 'Vui lòng upload ít nhất một file KML/KMZ thành công trước khi xem bản đồ'
+      }
+      
+      if (errorMessage) {
+        set(snackbarAtom, { open: true, message: errorMessage })
+        return
+      }
+    }
     
     // Tính bounds từ tất cả layer groups hiện có
     const layerGroups = get(layerGroupsAtom)
