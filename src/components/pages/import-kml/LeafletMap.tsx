@@ -6,9 +6,10 @@ import {
   shouldFitBoundsAtom, 
   clearFitBoundsAtom, 
   manualBoundsAtom,
-  setSelectedLineStringAtom
-} from '../../../stores/importKMLAtoms'
-import type { LayerGroup, GeometryData, LayerData, SelectedLineString } from '../../../stores/importKMLAtoms'
+  setSelectedLineStringAtom,
+  selectedFeaturesForMapAtom
+} from '@/stores/importKMLAtoms'
+import type { LayerGroup, GeometryData, LayerData, SelectedLineString, SelectedFeature } from '@/stores/importKMLAtoms'
 import 'leaflet/dist/leaflet.css'
 
 // Component để handle map resize
@@ -46,13 +47,10 @@ interface LeafletMapProps {
 const MapController = React.memo(({ bounds }: { bounds?: [[number, number], [number, number]] }) => {
   const map = useMap()
 
-  // Chỉ log, không tự động fit bounds nữa để tránh conflict với FitBoundsController
-  useEffect(() => {
-    if (bounds && map) {
-      console.log('[MapController] Bounds available but not auto-fitting:', bounds)
-      // Removed auto-fit logic to avoid conflict with FitBoundsController
-    }
-  }, [bounds, map])
+        // Removed logging for better performance
+      useEffect(() => {
+        // Controller is simplified for performance
+      }, [bounds, map])
 
   return null
 })
@@ -64,19 +62,12 @@ const FitBoundsController = React.memo(() => {
   const [manualBounds] = useAtom(manualBoundsAtom)
   const clearFitBounds = useSetAtom(clearFitBoundsAtom)
 
-  console.log('[FitBoundsController] Component rendered with:', { shouldFitBounds, manualBounds })
-
   useEffect(() => {
-    console.log('[FitBoundsController] Effect triggered:', { shouldFitBounds, manualBounds })
-    
     if (shouldFitBounds && manualBounds && map) {
-      console.log('[FitBoundsController] Attempting to fit bounds:', manualBounds)
-      
       // Delay một chút để đảm bảo map đã render xong
       const timer = setTimeout(() => {
         try {
           const latLngBounds = new LatLngBounds(manualBounds[0], manualBounds[1])
-          console.log('[FitBoundsController] Fitting to bounds:', latLngBounds)
           
           map.fitBounds(latLngBounds, { 
             padding: [50, 50],
@@ -85,7 +76,6 @@ const FitBoundsController = React.memo(() => {
             duration: 1.5 // Animation mượt mà hơn
           })
           
-          console.log('[FitBoundsController] Fit bounds completed')
           clearFitBounds() // Clear flag sau khi fit bounds
         } catch (error) {
           console.error('[FitBoundsController] Error fitting bounds:', error)
@@ -95,7 +85,6 @@ const FitBoundsController = React.memo(() => {
 
       return () => clearTimeout(timer)
     } else if (shouldFitBounds && !manualBounds) {
-      console.warn('[FitBoundsController] shouldFitBounds=true but manualBounds is undefined')
       clearFitBounds()
     }
   }, [shouldFitBounds, manualBounds, map, clearFitBounds])
@@ -138,13 +127,17 @@ const convertToGeoJSON = (geometry: GeometryData[]): GeoJSON.FeatureCollection =
 const LayerRenderer = React.memo(({ 
   layer, 
   groupVisible,
-  groupId 
+  groupId,
+  groupName
 }: { 
   layer: LayerData, 
   groupVisible: boolean,
-  groupId: string
+  groupId: string,
+  groupName: string
 }) => {
   const setSelectedLineString = useSetAtom(setSelectedLineStringAtom)
+  const [selectedFeatures] = useAtom(selectedFeaturesForMapAtom)
+  const setSelectedFeatures = useSetAtom(selectedFeaturesForMapAtom)
   
   const geoJsonData = useMemo(() => {
     if (!layer.visible || !groupVisible || !layer.geometry?.length) {
@@ -153,14 +146,19 @@ const LayerRenderer = React.memo(({
     return convertToGeoJSON(layer.geometry)
   }, [layer.geometry, layer.visible, groupVisible])
 
-  const layerStyle = useMemo(() => ({
-    color: layer.color,
-    weight: 3,
-    opacity: 0.9,
-    fillOpacity: 0.4,
-    fillColor: layer.color,
-    dashArray: layer.name.includes('Line') ? '5, 5' : undefined
-  }), [layer.color, layer.name])
+  const layerStyle = useCallback((feature?: GeoJSON.Feature) => {
+    const featureId = feature?.id?.toString() || ''
+    const isSelected = selectedFeatures.some(f => f.id === featureId)
+    
+    return {
+      color: isSelected ? '#ff6b35' : layer.color,
+      weight: isSelected ? 4 : 3,
+      opacity: isSelected ? 1.0 : 0.9,
+      fillOpacity: isSelected ? 0.6 : 0.4,
+      fillColor: isSelected ? '#ff6b35' : layer.color,
+      dashArray: layer.name.includes('Line') ? '5, 5' : undefined
+    }
+  }, [layer.color, layer.name, selectedFeatures])
 
   const onEachFeature = useCallback((feature: GeoJSON.Feature, leafletLayer: L.Layer) => {
     // Bind popup với thông tin feature
@@ -188,15 +186,41 @@ const LayerRenderer = React.memo(({
       })
     }
 
-    // Handle click event cho LineString
+        // Handle click event cho feature selection
     leafletLayer.on('click', (e) => {
-      // Chỉ xử lý cho LineString
-      if (feature.geometry?.type === 'LineString') {
-        console.log('[LayerRenderer] LineString clicked:', feature)
+      const featureId = feature.id?.toString() || `${groupId}-${layer.id}-${Date.now()}`
+      
+      // Check if feature is already selected
+      const existingIndex = selectedFeatures.findIndex(f => f.id === featureId)
+      
+      if (existingIndex >= 0) {
+        // Deselect feature
+        const newSelection = selectedFeatures.filter(f => f.id !== featureId)
+        setSelectedFeatures(newSelection)
+      } else {
+        // Select feature - tạo SelectedFeature object
+        const selectedFeature: SelectedFeature = {
+          id: featureId,
+          groupId: groupId,
+          layerId: layer.id,
+          groupName: groupName,
+          layerName: layer.name,
+          geometry: {
+            type: feature.geometry?.type || 'Point',
+            coordinates: (feature.geometry as GeoJSON.Point | GeoJSON.LineString | GeoJSON.Polygon)?.coordinates || [],
+            properties: feature.properties || {}
+          } as GeometryData,
+          properties: feature.properties || {}
+        }
         
-        // Tạo SelectedLineString object
+        const newSelection = [...selectedFeatures, selectedFeature]
+        setSelectedFeatures(newSelection)
+      }
+      
+      // For LineString, also trigger package selection dialog
+      if (feature.geometry?.type === 'LineString') {
         const selectedLineString: SelectedLineString = {
-          featureId: feature.id || `${groupId}-${layer.id}-${Date.now()}`,
+          featureId: featureId,
           layerId: layer.id,
           groupId: groupId,
           properties: feature.properties || {},
@@ -207,14 +231,13 @@ const LayerRenderer = React.memo(({
           }
         }
         
-        // Set selected LineString để trigger package selection dialog
         setSelectedLineString(selectedLineString)
-        
-        // Prevent event bubbling
-        e.originalEvent.stopPropagation()
       }
+      
+      // Prevent event bubbling
+      e.originalEvent.stopPropagation()
     })
-  }, [layer.id, groupId, setSelectedLineString])
+  }, [layer.id, groupId, groupName, layer.name, setSelectedLineString, selectedFeatures, setSelectedFeatures])
 
   if (!geoJsonData) return null
 
@@ -235,29 +258,20 @@ export const LeafletMap = ({
   onLayoutChange
 }: LeafletMapProps) => {
   const mapRef = useRef<LeafletMapType | null>(null)
-  
-  console.log('[LeafletMap] Component rendered with layerGroups:', layerGroups)
-  console.log('[LeafletMap] Time:', new Date().toISOString())
 
-  // Fallback function để tính bounds từ geometry data
+  // Optimized fallback function để tính bounds từ geometry data
   const calculateBoundsFromGeometry = (layerGroups: LayerGroup[]) => {
-    console.log('[LeafletMap] Calculating bounds from geometry data as fallback')
-    
     let minLat = Infinity, minLng = Infinity
     let maxLat = -Infinity, maxLng = -Infinity
     let foundValidBounds = false
 
-    layerGroups.forEach((group, groupIndex) => {
+    layerGroups.forEach((group) => {
       if (!group.visible) return
       
-      group.layers.forEach((layer, layerIndex) => {
+      group.layers.forEach((layer) => {
         if (!layer.visible || !layer.geometry?.length) return
         
-        console.log(`[LeafletMap] Processing layer ${groupIndex}-${layerIndex} geometry:`, layer.geometry.length)
-        
-        layer.geometry.forEach((geom, geomIndex) => {
-          console.log(`[LeafletMap] Processing geometry ${geomIndex}:`, geom.type, geom.coordinates)
-          
+        layer.geometry.forEach((geom) => {
           const processCoordinate = (coord: number[]) => {
             if (coord.length >= 2) {
               const [lng, lat] = coord
@@ -267,7 +281,6 @@ export const LeafletMap = ({
                 maxLat = Math.max(maxLat, lat)
                 maxLng = Math.max(maxLng, lng)
                 foundValidBounds = true
-                console.log(`[LeafletMap] Updated bounds: lat(${minLat}, ${maxLat}) lng(${minLng}, ${maxLng})`)
               }
             }
           }
@@ -287,27 +300,16 @@ export const LeafletMap = ({
       })
     })
 
-    if (!foundValidBounds || minLat === Infinity) {
-      console.log('[LeafletMap] No valid coordinates found in fallback calculation')
-      return undefined
-    }
-    
-    const result = [[minLat, minLng], [maxLat, maxLng]] as [[number, number], [number, number]]
-    console.log('[LeafletMap] Fallback calculated bounds:', result)
-    return result
+    return foundValidBounds && minLat !== Infinity 
+      ? [[minLat, minLng], [maxLat, maxLng]] as [[number, number], [number, number]]
+      : undefined
   }
 
-  // Tính toán bounds tổng hợp từ tất cả layers visible
+  // Optimized bounds calculation
   const totalBounds = useMemo(() => {
-    console.log('[LeafletMap] Starting totalBounds calculation')
-    console.log('[LeafletMap] All layerGroups:', layerGroups)
-    
     const visibleGroups = layerGroups.filter(group => group.visible)
-    console.log('[LeafletMap] Visible groups after filter:', visibleGroups)
-    console.log('[LeafletMap] Calculating totalBounds from visible groups:', visibleGroups.length)
     
     if (!visibleGroups.length) {
-      console.log('[LeafletMap] No visible groups, totalBounds = undefined')
       return undefined
     }
 
@@ -315,46 +317,25 @@ export const LeafletMap = ({
     let maxLat = -Infinity, maxLng = -Infinity
     let foundValidBounds = false
 
-    visibleGroups.forEach((group, index) => {
-      console.log(`[LeafletMap] Processing group ${index}:`, {
-        name: group.name,
-        visible: group.visible, 
-        bounds: group.bounds,
-        hasBounds: !!group.bounds
-      })
-      
+    visibleGroups.forEach((group) => {
       if (group.bounds) {
         const [[groupMinLat, groupMinLng], [groupMaxLat, groupMaxLng]] = group.bounds
-        console.log(`[LeafletMap] Group ${index} bounds:`, {
-          min: [groupMinLat, groupMinLng],
-          max: [groupMaxLat, groupMaxLng]
-        })
         
         minLat = Math.min(minLat, groupMinLat)
         minLng = Math.min(minLng, groupMinLng)
         maxLat = Math.max(maxLat, groupMaxLat)
         maxLng = Math.max(maxLng, groupMaxLng)
         foundValidBounds = true
-        
-        console.log(`[LeafletMap] Updated bounds so far:`, {
-          min: [minLat, minLng],
-          max: [maxLat, maxLng]
-        })
-      } else {
-        console.warn(`[LeafletMap] Group ${index} has no bounds:`, group.name)
       }
     })
 
     // Nếu không tìm thấy bounds từ groups, thử tính từ geometry data
     if (!foundValidBounds || minLat === Infinity) {
-      console.log('[LeafletMap] No valid bounds from groups, trying fallback calculation')
       return calculateBoundsFromGeometry(layerGroups)
     }
     
-    const result = [[minLat, minLng], [maxLat, maxLng]] as [[number, number], [number, number]]
-    console.log('[LeafletMap] Final calculated totalBounds:', result)
-    return result
-  }, [layerGroups])
+    return [[minLat, minLng], [maxLat, maxLng]] as [[number, number], [number, number]]
+  }, [layerGroups, calculateBoundsFromGeometry])
 
   // Render visible layers với memoization
   const visibleLayers = useMemo(() => {
@@ -367,6 +348,7 @@ export const LeafletMap = ({
             layer={layer}
             groupVisible={group.visible}
             groupId={group.id}
+            groupName={group.name}
           />
         ))
       )

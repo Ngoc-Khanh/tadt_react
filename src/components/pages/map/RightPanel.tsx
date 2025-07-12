@@ -10,26 +10,128 @@ import TextField from '@mui/material/TextField';
 import LinearProgress from '@mui/material/LinearProgress';
 import SearchIcon from '@mui/icons-material/Search';
 import LinkIcon from '@mui/icons-material/Link';
-import type { ImportedLayerData } from '@/services/assignment.api';
+import TrendingUpIcon from '@mui/icons-material/TrendingUp';
+import { usePackages } from '@/hooks/usePackages';
+import type { PackageAssignment, LayerGroup } from '@/stores/importKMLAtoms';
+import type { IMapResponse } from '@/constants/interfaces';
+
+type MapRenderData = {
+  layerGroups: LayerGroup[]
+  assignments: PackageAssignment[]
+  projectInfo: IMapResponse | null
+  importedAt: string
+}
 
 interface RightPanelProps {
   open: boolean;
   onClose: () => void;
-  importedData?: ImportedLayerData | null;
+  mapRenderData?: MapRenderData | null;
+  selectedPackageInfo?: PackageAssignment | null;
 }
 
-export default function RightPanel({ open, onClose, importedData }: RightPanelProps) {
+// Component hiển thị package với tiến độ thực tế
+function PackageItem({ assignment, selectedPackageInfo }: { 
+  assignment: PackageAssignment;
+  selectedPackageInfo?: PackageAssignment | null;
+}) {
+  const { data: packages } = usePackages();
+  
+  // Tìm package detail từ danh sách packages
+  const packageDetail = packages?.find(pkg => pkg.package_id === assignment.packageId);
+
+  const getProgressValue = (value: number | undefined | null) => {
+    return typeof value === 'number' && !isNaN(value) ? value : 0;
+  };
+
+  return (
+    <Box
+      p={1}
+      border="1px solid #e0e0e0"
+      borderRadius={1}
+      bgcolor={selectedPackageInfo?.id === assignment.id ? "#e3f2fd" : "#fafafa"}
+      sx={{
+        borderColor: selectedPackageInfo?.id === assignment.id ? "#1976d2" : "#e0e0e0",
+        borderWidth: selectedPackageInfo?.id === assignment.id ? 2 : 1
+      }}
+    >
+      <Stack spacing={0.5}>
+        <Box display="flex" alignItems="center" justifyContent="space-between">
+          <Typography fontSize={12} color="primary" fontWeight={600}>
+            {assignment.packageId}
+          </Typography>
+          <Typography fontSize={12} color="green" fontWeight={500}>
+            Đã gán
+          </Typography>
+        </Box>
+        <Typography fontSize={13} fontWeight={500}>
+          {assignment.packageName}
+        </Typography>
+
+        {/* Progress bar với dữ liệu thực tế */}
+        {packageDetail && (
+          <Box mt={0.5}>
+            <Box display="flex" alignItems="center" gap={0.5} mb={0.5}>
+              <TrendingUpIcon fontSize="small" color="primary" sx={{ fontSize: 12 }} />
+              <Typography fontSize={11} color="text.secondary">
+                Tiến độ: {getProgressValue(packageDetail.tien_do_thuc_te)}%
+              </Typography>
+            </Box>
+            <LinearProgress 
+              variant="determinate" 
+              value={getProgressValue(packageDetail.tien_do_thuc_te)} 
+              sx={{ 
+                height: 6, 
+                borderRadius: 3,
+                bgcolor: 'grey.200',
+                '& .MuiLinearProgress-bar': {
+                  borderRadius: 3,
+                  bgcolor: getProgressValue(packageDetail.tien_do_thuc_te) >= 100 ? 'success.main' : 
+                          getProgressValue(packageDetail.tien_do_thuc_te) >= 50 ? 'primary.main' : 'warning.main'
+                }
+              }}
+            />
+            <Box display="flex" justifyContent="space-between" mt={0.5}>
+              <Typography fontSize={10} color="gray">
+                Trạng thái: {packageDetail.trang_thai}
+              </Typography>
+              <Typography fontSize={10} fontWeight={600} color="primary">
+                {getProgressValue(packageDetail.tien_do_thuc_te)}%
+              </Typography>
+            </Box>
+          </Box>
+        )}
+
+        <Typography fontSize={11} color="gray">
+          Layer: {assignment.layerName} • Group: {assignment.groupName}
+        </Typography>
+        <Typography fontSize={11} color="gray">
+          LineString ID: {assignment.lineStringId}
+        </Typography>
+        <Box mt={0.5} display="flex" justifyContent="space-between">
+          <Typography fontSize={12} color="gray">
+            Gán lúc
+          </Typography>
+          <Typography fontSize={12} fontWeight={600}>
+            {new Date(assignment.timestamp).toLocaleString('vi-VN')}
+          </Typography>
+        </Box>
+      </Stack>
+    </Box>
+  );
+}
+
+export default function RightPanel({ open, onClose, mapRenderData, selectedPackageInfo }: RightPanelProps) {
   const theme = useTheme();
 
   // Calculate stats from imported data
-  const stats = importedData ? {
-    packageCount: importedData.assignments.length,
-    totalFeatures: importedData.layer_groups.reduce((total, group) => 
+  const stats = mapRenderData ? {
+    packageCount: mapRenderData.assignments.length,
+    totalFeatures: mapRenderData.layerGroups.reduce((total, group) => 
       total + group.layers.reduce((layerTotal, layer) => 
         layerTotal + (layer.geometry?.length || 0), 0
       ), 0
     ),
-    assignedFeatures: importedData.assignments.length,
+    assignedFeatures: mapRenderData.assignments.length,
   } : {
     packageCount: 1,
     totalFeatures: 1,
@@ -66,13 +168,13 @@ export default function RightPanel({ open, onClose, importedData }: RightPanelPr
       </Box>
 
       <Typography fontSize={12} color="text.secondary" mb={0.5}>
-        {importedData ? 'Imported Data Features' : 'Entity Features'}
+        {mapRenderData ? 'Imported Data Features' : 'Entity Features'}
       </Typography>
       <Typography variant="h6" fontWeight={600}>
-        {importedData?.project_name || 'Polygon_001'}
+        {mapRenderData?.projectInfo?.ten_du_an || 'Polygon_001'}
       </Typography>
       <Typography fontSize={12} color="gray" mt={0.5}>
-        {importedData ? `Import ID: ${importedData.import_id}` : 'Tòa nhà'}
+        {mapRenderData ? `Import lúc: ${new Date(mapRenderData.importedAt).toLocaleString('vi-VN')}` : 'Tòa nhà'}
       </Typography>
 
       <Box
@@ -108,7 +210,7 @@ export default function RightPanel({ open, onClose, importedData }: RightPanelPr
         <Typography fontWeight={600}>
           Danh sách gói thầu ({stats.packageCount})
         </Typography>
-        {importedData && (
+        {mapRenderData && (
           <Button
             startIcon={<LinkIcon />}
             variant="contained"
@@ -132,44 +234,14 @@ export default function RightPanel({ open, onClose, importedData }: RightPanelPr
       </Box>
 
       {/* Package List */}
-      {importedData && importedData.assignments.length > 0 ? (
+      {mapRenderData && mapRenderData.assignments.length > 0 ? (
         <Stack spacing={1} mt={2}>
-          {importedData.assignments.map((assignment) => (
-            <Box
+          {mapRenderData.assignments.map((assignment) => (
+            <PackageItem
               key={assignment.id}
-              p={1}
-              border="1px solid #e0e0e0"
-              borderRadius={1}
-              bgcolor="#fafafa"
-            >
-              <Stack spacing={0.5}>
-                <Box display="flex" alignItems="center" justifyContent="space-between">
-                  <Typography fontSize={12} color="primary" fontWeight={600}>
-                    {assignment.packageId}
-                  </Typography>
-                  <Typography fontSize={12} color="green" fontWeight={500}>
-                    Đã gán
-                  </Typography>
-                </Box>
-                <Typography fontSize={13} fontWeight={500}>
-                  {assignment.packageName}
-                </Typography>
-                <Typography fontSize={11} color="gray">
-                  Layer: {assignment.layerName} • Group: {assignment.groupName}
-                </Typography>
-                <Typography fontSize={11} color="gray">
-                  LineString ID: {assignment.lineStringId}
-                </Typography>
-                <Box mt={0.5} display="flex" justifyContent="space-between">
-                  <Typography fontSize={12} color="gray">
-                    Gán lúc
-                  </Typography>
-                  <Typography fontSize={12} fontWeight={600}>
-                    {new Date(assignment.timestamp).toLocaleString('vi-VN')}
-                  </Typography>
-                </Box>
-              </Stack>
-            </Box>
+              assignment={assignment}
+              selectedPackageInfo={selectedPackageInfo}
+            />
           ))}
         </Stack>
       ) : (

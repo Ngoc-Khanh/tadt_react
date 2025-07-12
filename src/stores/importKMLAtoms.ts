@@ -1,5 +1,5 @@
-import { atom } from 'jotai'
 import type { IMapResponse, IPackageResponse } from '@/constants/interfaces'
+import { atom } from 'jotai'
 
 export interface ImportedFile {
   id: string
@@ -79,6 +79,28 @@ export interface PackageAssignment {
 
 export const packageAssignmentsAtom = atom<PackageAssignment[]>([])
 export const showConfirmImportDialogAtom = atom<boolean>(false)
+
+// Shared data for map rendering (được set sau khi import)
+export const mapRenderDataAtom = atom<{
+  layerGroups: LayerGroup[]
+  assignments: PackageAssignment[]
+  projectInfo: IMapResponse | null
+  importedAt: string
+} | null>(null)
+
+// Selected features for main map (individual features)
+export interface SelectedFeature {
+  id: string // featureId
+  groupId: string
+  layerId: string
+  groupName: string
+  layerName: string
+  geometry: GeometryData
+  properties?: Record<string, string | number | boolean>
+}
+
+export const selectedFeaturesForMapAtom = atom<SelectedFeature[]>([])
+export const zoomToLayerAtom = atom<string | null>(null)
 
 // Derived atoms
 export const successfulFilesAtom = atom((get) => 
@@ -241,28 +263,102 @@ export const closeConfirmImportDialogAtom = atom(
   }
 )
 
-// Note: This atom should be used with async wrapper since we can't make atoms async directly
+// Direct import to map without API call
 export const confirmImportToMapAtom = atom(
   null,
   (get, set) => {
     const assignments = get(packageAssignmentsAtom)
     const selectedProject = get(selectedProjectAtom)
-    const layerGroups = get(layerGroupsAtom)
+    const selectedFeatures = get(selectedFeaturesForMapAtom)
     
     if (!selectedProject) {
       set(snackbarAtom, { 
         open: true, 
         message: 'Vui lòng chọn dự án trước khi import!' 
       })
-      return
+      return false
+    }
+
+    if (selectedFeatures.length === 0) {
+      set(snackbarAtom, { 
+        open: true, 
+        message: 'Vui lòng chọn ít nhất một feature để import!' 
+      })
+      return false
+    }
+
+    // Group selected features by group and layer
+    interface GroupedLayer {
+      id: string
+      name: string
+      visible: boolean
+      color: string
+      geometry: GeometryData[]
     }
     
-    // Return data for external async handling
-    return {
-      project_id: selectedProject.project_id,
-      assignments,
-      layer_groups: layerGroups
+    interface GroupedGroup {
+      id: string
+      name: string
+      visible: boolean
+      layers: Record<string, GroupedLayer>
+      bounds?: [[number, number], [number, number]]
     }
+    
+    const groupedFeatures = selectedFeatures.reduce((acc, feature) => {
+      if (!acc[feature.groupId]) {
+        acc[feature.groupId] = {
+          id: feature.groupId,
+          name: feature.groupName,
+          visible: true,
+          layers: {},
+          bounds: undefined
+        }
+      }
+      
+      if (!acc[feature.groupId].layers[feature.layerId]) {
+        acc[feature.groupId].layers[feature.layerId] = {
+          id: feature.layerId,
+          name: feature.layerName,
+          visible: true,
+          color: '#2196f3', // Default color
+          geometry: []
+        }
+      }
+      
+      acc[feature.groupId].layers[feature.layerId].geometry.push(feature.geometry)
+      return acc
+    }, {} as Record<string, GroupedGroup>)
+
+    // Convert to LayerGroup format
+    const filteredLayerGroups = Object.values(groupedFeatures).map(group => ({
+      ...group,
+      layers: Object.values(group.layers)
+    }))
+
+    // Filter assignments to only include selected features
+    const filteredAssignments = assignments.filter(assignment => 
+      selectedFeatures.some(feature => 
+        feature.groupId === assignment.groupId && 
+        feature.layerId === assignment.layerId
+      )
+    )
+    
+    // Set data for map rendering
+    set(mapRenderDataAtom, {
+      layerGroups: filteredLayerGroups,
+      assignments: filteredAssignments,
+      projectInfo: selectedProject,
+      importedAt: new Date().toISOString()
+    })
+    
+    console.log('[confirmImportToMapAtom] Data set for map rendering:', {
+      selectedFeaturesCount: selectedFeatures.length,
+      groupsCount: filteredLayerGroups.length,
+      assignments: filteredAssignments.length,
+      project: selectedProject.ten_du_an
+    })
+    
+    return true
   }
 )
 

@@ -30,9 +30,9 @@ import {
   successfulFilesAtom,
   confirmImportToMapAtom,
   clearImportDataAtom,
-  snackbarAtom
+  snackbarAtom,
+  selectedFeaturesForMapAtom
 } from '@/stores/importKMLAtoms'
-import { useSaveAssignments } from '@/hooks/useImportedData'
 import { useTabNavigation } from '@/contexts/TabContext'
 
 interface ConfirmImportDialogProps {
@@ -56,13 +56,12 @@ export function ConfirmImportDialog({
   const [layerGroups] = useAtom(layerGroupsAtom)
   const [selectedProject] = useAtom(selectedProjectAtom)
   const [successfulFiles] = useAtom(successfulFilesAtom)
+  const [selectedFeatures] = useAtom(selectedFeaturesForMapAtom)
   
   const confirmImportData = useSetAtom(confirmImportToMapAtom)
   const clearImportData = useSetAtom(clearImportDataAtom)
   const showSnackbar = useSetAtom(snackbarAtom)
   const { navigateToMap } = useTabNavigation()
-  
-  const saveAssignments = useSaveAssignments()
 
   // Tính tổng số features
   const totalFeatures = layerGroups.reduce((total, group) =>
@@ -71,43 +70,52 @@ export function ConfirmImportDialog({
     ), 0
   )
 
+  // Số features đã được chọn
+  const selectedFeaturesCount = selectedFeatures.length
+
   const totalAssignments = assignedPackages.length
-  const unassignedFeatures = totalFeatures - totalAssignments
+  const unassignedFeatures = selectedFeaturesCount - totalAssignments
 
-  const handleConfirm = async () => {
-    try {
-      // Get import data from atom
-      const importData = confirmImportData()
-      
-      if (!importData) {
-        showSnackbar({ open: true, message: 'Không thể lấy dữ liệu import!' })
-        return
+  // Group selected features by layer for display
+  const selectedFeaturesByLayer = selectedFeatures.reduce((acc, feature) => {
+    const key = `${feature.groupName}-${feature.layerName}`
+    if (!acc[key]) {
+      acc[key] = {
+        groupName: feature.groupName,
+        layerName: feature.layerName,
+        count: 0
       }
-
-      // Call API to save assignments
-      await saveAssignments.mutateAsync(importData)
-      
-      // Clear import data
-      clearImportData()
-      
-      // Show success message
-      showSnackbar({ 
-        open: true, 
-        message: `Đã import ${totalAssignments} gói thầu vào bản đồ chính thành công!` 
-      })
-      
-      // Navigate to map tab
-      setTimeout(() => {
-        navigateToMap()
-      }, 1000) // Delay để user thấy success message
-      
-      // Call parent onConfirm
-      onConfirm()
-      
-    } catch (error) {
-      console.error('[ConfirmImportDialog] Error importing data:', error)
-      showSnackbar({ open: true, message: 'Lỗi khi import dữ liệu! Vui lòng thử lại.' })
     }
+    acc[key].count++
+    return acc
+  }, {} as Record<string, { groupName: string; layerName: string; count: number }>)
+
+  const selectedLayerNames = Object.values(selectedFeaturesByLayer)
+
+  const handleConfirm = () => {
+    // Set data for map rendering
+    const success = confirmImportData()
+    
+    if (!success) {
+      return // Error message already shown by atom
+    }
+
+    // Clear import data  
+    clearImportData()
+    
+    // Show success message
+    showSnackbar({ 
+      open: true, 
+      message: `Đã import ${totalAssignments} gói thầu vào bản đồ chính thành công!` 
+    })
+    
+    // Navigate to map tab
+    setTimeout(() => {
+      navigateToMap()
+    }, 1000) // Delay để user thấy success message
+    
+    // Call parent onConfirm
+    onConfirm()
   }
 
   return (
@@ -219,6 +227,67 @@ export function ConfirmImportDialog({
           </Box>
         </Box>
 
+        {/* Selected Layers Info */}
+        {selectedLayerNames.length > 0 && (
+          <Box sx={{ 
+            p: 2, 
+            bgcolor: 'warning.50', 
+            borderRadius: 2, 
+            border: '1px solid',
+            borderColor: 'warning.200',
+            mb: 3
+          }}>
+            <Typography variant="h6" gutterBottom color="warning.main" fontWeight="bold">
+              Layers được chọn để import ({selectedLayerNames.length} layers)
+            </Typography>
+            
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+              <Typography variant="body2">
+                <strong>Tổng features đã chọn:</strong> {selectedFeaturesCount}
+              </Typography>
+            </Box>
+
+            <Box sx={{ maxHeight: 120, overflow: 'auto' }}>
+              {selectedLayerNames.map((item, index) => (
+                <Box key={index} sx={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  alignItems: 'center',
+                  py: 0.5,
+                  px: 1,
+                  bgcolor: 'background.paper',
+                  borderRadius: 1,
+                  mb: 0.5
+                }}>
+                  <Typography variant="body2">
+                    <strong>{item.layerName}</strong> ({item.groupName})
+                  </Typography>
+                  <Chip 
+                    label={`${item.count} features`} 
+                    size="small" 
+                    color="info" 
+                    variant="outlined"
+                  />
+                </Box>
+              ))}
+            </Box>
+          </Box>
+        )}
+
+        {/* Warning for no selection */}
+        {selectedLayerNames.length === 0 && (
+          <Alert 
+            severity="error" 
+            icon={<Warning />}
+            sx={{ mb: 3 }}
+          >
+            <Typography variant="body2">
+              <strong>Lỗi:</strong> Bạn chưa chọn layer nào để import! 
+              Vui lòng quay lại và chọn ít nhất một layer có chứa LineString.
+            </Typography>
+          </Alert>
+        )}
+
         {/* Warning for unassigned features */}
         {unassignedFeatures > 0 && (
           <Alert 
@@ -305,13 +374,16 @@ export function ConfirmImportDialog({
           onClick={handleConfirm}
           variant="contained"
           startIcon={<Upload />}
-          disabled={saveAssignments.isPending}
+          disabled={selectedLayerNames.length === 0}
           sx={{ 
             borderRadius: 2,
             minWidth: 160
           }}
         >
-          {saveAssignments.isPending ? 'Đang import...' : 'Import vào bản đồ chính'}
+          {selectedLayerNames.length === 0 
+            ? 'Chọn layer để import' 
+            : `Import ${selectedFeaturesCount} features`
+          }
         </Button>
       </DialogActions>
     </Dialog>

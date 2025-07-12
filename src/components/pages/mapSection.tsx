@@ -1,31 +1,18 @@
-import { Layers, Refresh } from '@mui/icons-material'
-import { Backdrop, Box, Button, Fade, Popper, Typography, CircularProgress, Alert } from "@mui/material"
-import type { LatLngExpression, LeafletMouseEvent } from 'leaflet'
+import { Layers } from '@mui/icons-material'
+import { Backdrop, Box, Button, Fade, Popper, Typography } from "@mui/material"
+import type { LatLngExpression } from 'leaflet'
+import { LatLngBounds } from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import React, { memo, useCallback, useMemo, useState } from 'react'
-import { MapContainer, Polygon, TileLayer, useMapEvents, GeoJSON } from 'react-leaflet'
+import React, { memo, useCallback, useMemo, useState, useEffect } from 'react'
+import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet'
 import AccordionUsage from './map/AccordionUsage'
 import RightPanel from './map/RightPanel'
-import { useImportedData } from '@/hooks/useImportedData'
-import type { ImportedLayerData } from '@/services/assignment.api'
-
-// Sample polygon data - moved outside component to avoid recreation
-const samplePolygon = {
-  id: 'polygon_001',
-  name: 'Polygon_001',
-  description: 'Tòa nhà',
-  coordinates: [
-    [21.0350, 105.8500],
-    [21.0400, 105.8550],
-    [21.0380, 105.8600],
-    [21.0320, 105.8580],
-    [21.0300, 105.8530],
-    [21.0350, 105.8500]
-  ] as LatLngExpression[],
-  color: '#2196f3',
-  fillColor: '#2196f3',
-  fillOpacity: 0.4
-}
+import { useAtom, useSetAtom } from 'jotai'
+import { 
+  mapRenderDataAtom, 
+  zoomToLayerAtom 
+} from '@/stores/importKMLAtoms'
+import type { PackageAssignment, LayerGroup } from '@/stores/importKMLAtoms'
 
 // Memoized map styles to prevent recreation
 const mapContainerStyle = {
@@ -33,156 +20,189 @@ const mapContainerStyle = {
   width: '100vw'
 }
 
-// Memoized polygon path options
-const polygonPathOptions = {
-  color: samplePolygon.color,
-  fillColor: samplePolygon.fillColor,
-  fillOpacity: samplePolygon.fillOpacity,
-  weight: 3,
-  opacity: 0.9
-}
+// Component to handle zoom to layer functionality
+const ZoomToLayerController = memo(() => {
+  const map = useMap()
+  const [zoomToLayer] = useAtom(zoomToLayerAtom)
+  const [mapRenderData] = useAtom(mapRenderDataAtom)
+  const setZoomToLayer = useSetAtom(zoomToLayerAtom)
 
-// Optimized Map Event Handler
-const MapEventHandler = memo(() => {
-  useMapEvents({
-    click: () => {
-      // Handle general map click if needed
-    },
-  })
+  useEffect(() => {
+    if (!zoomToLayer || !mapRenderData || !map) return
+
+    // Find the target layer
+    let targetLayer = null
+    for (const group of mapRenderData.layerGroups) {
+      const layer = group.layers.find(l => l.id === zoomToLayer)
+      if (layer) {
+        targetLayer = layer
+        break
+      }
+    }
+
+    if (!targetLayer || !targetLayer.geometry.length) {
+      setZoomToLayer(null)
+      return
+    }
+
+    // Calculate bounds from layer geometry
+    let minLat = Infinity, minLng = Infinity
+    let maxLat = -Infinity, maxLng = -Infinity
+    let foundValidBounds = false
+
+    targetLayer.geometry.forEach((geom) => {
+      const processCoordinate = (coord: number[]) => {
+        if (coord.length >= 2) {
+          const [lng, lat] = coord
+          if (typeof lng === 'number' && typeof lat === 'number' && !isNaN(lng) && !isNaN(lat)) {
+            minLat = Math.min(minLat, lat)
+            minLng = Math.min(minLng, lng)
+            maxLat = Math.max(maxLat, lat)
+            maxLng = Math.max(maxLng, lng)
+            foundValidBounds = true
+          }
+        }
+      }
+
+      const processCoordinates = (coords: unknown): void => {
+        if (Array.isArray(coords)) {
+          if (typeof coords[0] === 'number') {
+            processCoordinate(coords)
+          } else {
+            coords.forEach(processCoordinates)
+          }
+        }
+      }
+
+      processCoordinates(geom.coordinates)
+    })
+
+    if (foundValidBounds && minLat !== Infinity) {
+      const bounds = new LatLngBounds([minLat, minLng], [maxLat, maxLng])
+      map.fitBounds(bounds, { 
+        padding: [50, 50],
+        maxZoom: 15,
+        animate: true,
+        duration: 1.0
+      })
+    }
+
+    // Clear zoom target
+    setZoomToLayer(null)
+  }, [zoomToLayer, mapRenderData, map, setZoomToLayer])
+
   return null
 })
 
-MapEventHandler.displayName = 'MapEventHandler'
+ZoomToLayerController.displayName = 'ZoomToLayerController'
 
-// Memoized Polygon Component
-const MemoizedPolygon = memo(({ onClick }: { onClick: () => void }) => {
-  const eventHandlers = useMemo(() => ({
-    click: onClick,
-    mouseover: (e: LeafletMouseEvent) => {
-      const target = e.target as { setStyle: (style: object) => void };
-      target.setStyle({
-        fillOpacity: 0.7,
-        weight: 4
-      });
-    },
-    mouseout: (e: LeafletMouseEvent) => {
-      const target = e.target as { setStyle: (style: object) => void };
-      target.setStyle({
-        fillOpacity: samplePolygon.fillOpacity,
-        weight: 3
-      });
-    }
-  }), [onClick])
-
-  return (
-    <Polygon
-      positions={samplePolygon.coordinates}
-      pathOptions={polygonPathOptions}
-      eventHandlers={eventHandlers}
-    />
-  )
-})
-
-MemoizedPolygon.displayName = 'MemoizedPolygon'
-
-// Component để render imported data
+// Optimized component để render imported data
 const ImportedDataRenderer = memo(({ 
-  importedDataList, 
+  layerGroups,
+  assignments,
+  projectName,
   onFeatureClick 
 }: { 
-  importedDataList: ImportedLayerData[]
-  onFeatureClick: (data: ImportedLayerData, featureId: string) => void
+  layerGroups: LayerGroup[]
+  assignments: PackageAssignment[]
+  projectName: string
+  onFeatureClick: (featureId: string, packageInfo?: PackageAssignment) => void
 }) => {
-  if (!importedDataList.length) return null
+  // Memoize assignment lookup for performance
+  const assignmentMap = useMemo(() => {
+    const map = new Map<string, PackageAssignment>()
+    assignments.forEach(a => {
+      const key = `${a.groupId}-${a.layerId}-${a.lineStringId}`
+      map.set(key, a)
+    })
+    return map
+  }, [assignments])
 
-  return (
-    <>
-      {importedDataList.map((importData) => 
-        importData.layer_groups.map((group) =>
-          group.layers.map((layer) => {
-            if (!layer.visible || !layer.geometry?.length) return null
+  // Memoize style to prevent re-creation
+  const layerStyle = useMemo(() => ({
+    weight: 2,
+    opacity: 0.8,
+    fillOpacity: 0.2
+  }), [])
 
-            // Convert geometry to GeoJSON
-            const geoJsonData = {
-              type: 'FeatureCollection' as const,
-              features: layer.geometry.map((geom, index) => ({
+  // Pre-compute all layer data for better performance
+  const layerData = useMemo(() => {
+    return layerGroups.flatMap((group) =>
+      group.layers
+        .filter(layer => layer.visible && layer.geometry?.length)
+        .map((layer) => {
+          const geoJsonData = {
+            type: 'FeatureCollection' as const,
+            features: layer.geometry.map((geom, index) => {
+              const key = `${group.id}-${layer.id}-${index}`
+              return {
                 type: 'Feature' as const,
-                id: `${importData.import_id}-${group.id}-${layer.id}-${index}`,
+                id: key,
                 properties: {
-                  ...geom.properties,
-                  importId: importData.import_id,
-                  projectName: importData.project_name,
+                  projectName,
                   groupName: group.name,
                   layerName: layer.name,
-                  // Find assigned package for this feature
-                  assignedPackage: importData.assignments.find(a => 
-                    a.groupId === group.id && 
-                    a.layerId === layer.id && 
-                    a.lineStringId === index
-                  )
+                  hasPackage: assignmentMap.has(key)
                 },
                 geometry: {
                   type: geom.type,
                   coordinates: geom.coordinates
                 } as GeoJSON.Geometry
-              }))
-            }
+              }
+            })
+          }
 
-            return (
-              <GeoJSON
-                key={`${importData.import_id}-${group.id}-${layer.id}`}
-                data={geoJsonData}
-                style={() => ({
-                  color: layer.color,
-                  weight: 3,
-                  opacity: 0.8,
-                  fillOpacity: 0.3,
-                  fillColor: layer.color
-                })}
-                onEachFeature={(feature, leafletLayer) => {
-                  const props = feature.properties
-                  const assignedPackage = props?.assignedPackage
+          const style = {
+            ...layerStyle,
+            color: layer.color,
+            fillColor: layer.color
+          }
 
-                  // Popup content
-                  const popupContent = `
-                    <div style="font-family: 'Roboto', sans-serif; max-width: 300px;">
-                      <div style="background: linear-gradient(135deg, #1976d2, #1565c0); color: white; padding: 12px; margin: -10px -10px 10px -10px; border-radius: 8px 8px 0 0;">
-                        <h4 style="margin: 0; font-size: 14px; font-weight: 600;">Dữ liệu đã import</h4>
-                      </div>
-                      <div style="padding: 4px 0;">
-                        <div style="margin: 8px 0; padding: 6px; background: #e3f2fd; border-radius: 4px;">
-                          <strong style="color: #1976d2;">Dự án:</strong> ${props?.projectName || 'N/A'}<br>
-                          <strong style="color: #1976d2;">Layer:</strong> ${props?.layerName || 'N/A'}
-                        </div>
-                        ${assignedPackage ? `
-                          <div style="margin: 8px 0; padding: 6px; background: #f3e5f5; border-radius: 4px; border-left: 3px solid #9c27b0;">
-                            <strong style="color: #9c27b0;">Gói thầu:</strong><br>
-                            <span style="color: #333; font-size: 13px;">${assignedPackage.packageName}</span>
-                          </div>
-                        ` : `
-                          <div style="margin: 8px 0; padding: 6px; background: #fff3e0; border-radius: 4px; border-left: 3px solid #ff9800;">
-                            <span style="color: #f57c00; font-size: 12px;">Chưa gán gói thầu</span>
-                          </div>
-                        `}
-                      </div>
-                    </div>
-                  `
+          return {
+            key: `${group.id}-${layer.id}`,
+            geoJsonData,
+            style
+          }
+        })
+    )
+  }, [layerGroups, projectName, assignmentMap, layerStyle])
 
-                  leafletLayer.bindPopup(popupContent, {
-                    maxWidth: 350,
-                    className: 'custom-popup'
-                  })
+  if (!layerGroups.length) return null
 
-                  // Click handler
-                  leafletLayer.on('click', () => {
-                    onFeatureClick(importData, feature.id?.toString() || '')
-                  })
-                }}
-              />
-            )
-          })
-        )
-      )}
+  return (
+    <>
+      {layerData.map((data) => (
+        <GeoJSON
+          key={data.key}
+          data={data.geoJsonData}
+          style={() => data.style}
+          onEachFeature={(feature, leafletLayer) => {
+            // Simple popup on hover for better UX
+            leafletLayer.on('mouseover', () => {
+              if (!leafletLayer.getPopup()) {
+                const popup = `
+                  <div style="font-family: -apple-system, sans-serif; padding: 8px;">
+                    <b>${feature.properties?.layerName || 'Layer'}</b><br>
+                    <small>Dự án: ${feature.properties?.projectName || 'N/A'}</small><br>
+                    <small>${feature.properties?.hasPackage ? '✅ Đã gán gói thầu' : '⚠️ Chưa gán gói thầu'}</small>
+                  </div>
+                `
+                leafletLayer.bindPopup(popup, {
+                  maxWidth: 200,
+                  closeButton: false
+                })
+              }
+            })
+
+            // Click handler
+            leafletLayer.on('click', () => {
+              const featureId = feature.id?.toString() || ''
+              const packageInfo = assignmentMap.get(featureId)
+              onFeatureClick(featureId, packageInfo)
+            })
+          }}
+        />
+      ))}
     </>
   )
 })
@@ -203,15 +223,11 @@ export function MapSection() {
   const [rightPanelOpen, setRightPanelOpen] = useState(false)
   
   // State cho imported data
-  const [selectedImportData, setSelectedImportData] = useState<ImportedLayerData | null>(null)
+  const [selectedPackageInfo, setSelectedPackageInfo] = useState<PackageAssignment | null>(null)
   
-  // Fetch imported data
-  const {
-    data: importedDataList = [],
-    isLoading: isLoadingImported,
-    error: importedError,
-    refetch: refetchImported
-  } = useImportedData()
+  // Get imported data from atom
+  const [mapRenderData] = useAtom(mapRenderDataAtom)
+  const setZoomToLayer = useSetAtom(zoomToLayerAtom)
 
   // Memoized handlers to prevent recreation
   const handleClick = useCallback((event: React.MouseEvent<HTMLElement>) => {
@@ -224,19 +240,41 @@ export function MapSection() {
     setTimeout(() => setIsAnimating(false), 200)
   }, [anchorEl, isAnimating])
 
-  const handlePolygonClick = useCallback(() => {
+  const handleFeatureClick = useCallback(() => {
     setRightPanelOpen(true)
   }, [])
 
   const handleRightPanelClose = useCallback(() => {
     setRightPanelOpen(false)
+    setSelectedPackageInfo(null)
   }, [])
 
-  const handleImportedFeatureClick = useCallback((data: ImportedLayerData, featureId: string) => {
-    setSelectedImportData(data)
+  const handleImportedFeatureClick = useCallback((featureId: string, packageInfo?: PackageAssignment) => {
+    setSelectedPackageInfo(packageInfo || null)
     setRightPanelOpen(true)
-    console.log('[MapSection] Imported feature clicked:', { data, featureId })
-  }, [setSelectedImportData, setRightPanelOpen])
+  }, [])
+
+  // Handle zoom to specific layer
+  const handleZoomToLayer = useCallback((layerId: string) => {
+    setZoomToLayer(layerId)
+    console.log('[MapSection] Zoom to layer:', layerId)
+  }, [setZoomToLayer])
+
+  // Calculate dynamic header info
+  const headerInfo = useMemo(() => {
+    if (!mapRenderData) {
+      return { title: 'Chưa có dữ liệu', subtitle: 'Vui lòng import dữ liệu KML' }
+    }
+
+    const totalLayers = mapRenderData.layerGroups.reduce((sum, group) => sum + group.layers.length, 0)
+    const totalGroups = mapRenderData.layerGroups.length
+    const assignedPackages = mapRenderData.assignments.length
+
+    return {
+      title: mapRenderData.projectInfo?.ten_du_an || 'Dự án không xác định',
+      subtitle: `${totalGroups} nhóm, ${totalLayers} lớp, ${assignedPackages} gói thầu`
+    }
+  }, [mapRenderData])
 
   // Memoized button styles
   const buttonStyles = useMemo(() => ({
@@ -249,7 +287,6 @@ export function MapSection() {
     border: open ? 'none' : '1px solid',
     borderColor: 'divider',
     boxShadow: open ? 3 : 2,
-    willChange: 'transform, box-shadow, background-color',
     '&:hover': {
       bgcolor: open ? 'primary.dark' : 'grey.100',
       transform: 'translateY(-1px)',
@@ -272,8 +309,7 @@ export function MapSection() {
     border: '1px solid',
     borderColor: 'divider',
     overflow: 'hidden',
-    backdropFilter: 'blur(8px)',
-    willChange: 'transform, opacity'
+    backdropFilter: 'blur(8px)'
   }), [])
 
   return (
@@ -296,68 +332,43 @@ export function MapSection() {
           gap: 1
         }}
       >
-        <Button
-          aria-describedby={id}
-          onClick={handleClick}
-          variant="contained"
-          disabled={isAnimating}
-          sx={buttonStyles}
-        >
-          <Layers fontSize="medium" />
-        </Button>
-
-        {/* Refresh Button for Imported Data */}
-        <Button
-          onClick={() => refetchImported()}
-          variant="outlined"
-          disabled={isLoadingImported}
-          sx={{
-            minWidth: 48,
-            width: 48,
-            height: 48,
-            borderRadius: 3,
-            bgcolor: 'background.paper',
-            color: 'text.primary',
-            border: '1px solid',
-            borderColor: 'divider',
-            boxShadow: 2,
-            '&:hover': {
-              bgcolor: 'grey.100',
-              transform: 'translateY(-1px)',
-              boxShadow: 3
-            },
-            transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-          }}
-        >
-          {isLoadingImported ? (
-            <CircularProgress size={20} />
-          ) : (
-            <Refresh fontSize="medium" />
+        <Box sx={{ position: 'relative' }}>
+          <Button
+            aria-describedby={id}
+            onClick={handleClick}
+            variant="contained"
+            disabled={isAnimating}
+            sx={buttonStyles}
+          >
+            <Layers fontSize="medium" />
+          </Button>
+          
+          {/* Badge hiển thị số lượng gói thầu */}
+          {mapRenderData && mapRenderData.assignments.length > 0 && (
+            <Box
+              sx={{
+                position: 'absolute',
+                top: -8,
+                right: -8,
+                minWidth: 20,
+                height: 20,
+                borderRadius: '50%',
+                bgcolor: 'error.main',
+                color: 'white',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '0.75rem',
+                fontWeight: 'bold',
+                border: '2px solid white',
+                boxShadow: 2
+              }}
+            >
+              {mapRenderData.assignments.length}
+            </Box>
           )}
-        </Button>
+        </Box>
       </Box>
-
-      {/* Error Alert for imported data */}
-      {importedError && (
-        <Alert 
-          severity="error" 
-          sx={{ 
-            position: 'absolute',
-            top: 80,
-            left: 16,
-            right: 16,
-            zIndex: 1000,
-            maxWidth: 400
-          }}
-          action={
-            <Button color="inherit" size="small" onClick={() => refetchImported()}>
-              Thử lại
-            </Button>
-          }
-        >
-          Lỗi khi tải dữ liệu đã import: {importedError.message}
-        </Alert>
-      )}
 
       {/* Backdrop for mobile overlay */}
       <Backdrop
@@ -413,13 +424,13 @@ export function MapSection() {
                     mb: 0.5
                   }}
                 >
-                  Danh sách lớp và khu vực
+                  {headerInfo.title}
                 </Typography>
                 <Typography
                   variant="body2"
                   sx={{ color: 'text.secondary' }}
                 >
-                  3 lớp, 3 khu vực
+                  {headerInfo.subtitle}
                 </Typography>
               </Box>
 
@@ -446,7 +457,11 @@ export function MapSection() {
                   }
                 }}
               >
-                <AccordionUsage onLayerClick={handlePolygonClick} />
+                <AccordionUsage 
+                  onLayerClick={handleFeatureClick} 
+                  mapRenderData={mapRenderData}
+                  onZoomToLayer={handleZoomToLayer}
+                />
               </Box>
             </Box>
           </Fade>
@@ -471,24 +486,26 @@ export function MapSection() {
           keepBuffer={2}
         />
 
-        {/* Optimized Polygon */}
-        <MemoizedPolygon onClick={handlePolygonClick} />
-
         {/* Imported Data Renderer */}
-        <ImportedDataRenderer 
-          importedDataList={importedDataList}
-          onFeatureClick={handleImportedFeatureClick}
-        />
+        {mapRenderData && (
+          <ImportedDataRenderer 
+            layerGroups={mapRenderData.layerGroups}
+            assignments={mapRenderData.assignments}
+            projectName={mapRenderData.projectInfo?.ten_du_an || 'Unknown Project'}
+            onFeatureClick={handleImportedFeatureClick}
+          />
+        )}
 
-        {/* Map Event Handler */}
-        <MapEventHandler />
+        {/* Zoom to Layer Controller */}
+        <ZoomToLayerController />
       </MapContainer>
 
       {/* Right Panel for Details */}
       <RightPanel
         open={rightPanelOpen}
         onClose={handleRightPanelClose}
-        importedData={selectedImportData}
+        mapRenderData={mapRenderData}
+        selectedPackageInfo={selectedPackageInfo}
       />
     </Box>
   )
