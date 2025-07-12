@@ -8,80 +8,82 @@ interface ParsedKMLResult {
   error?: string
 }
 
-// Calculate bounds từ geometry coordinates
-const calculateBounds = (geometries: GeometryData[]): [[number, number], [number, number]] | undefined => {
-  console.log('[KMLParser] calculateBounds called with geometries:', geometries.length)
-  
-  if (!geometries.length) {
-    console.log('[KMLParser] No geometries, returning undefined')
-    return undefined
+// Utility function để yield control back to browser
+const yieldToBrowser = (): Promise<void> => {
+  return new Promise(resolve => {
+    if (typeof requestAnimationFrame !== 'undefined') {
+      requestAnimationFrame(() => resolve())
+    } else {
+      setTimeout(() => resolve(), 0)
+    }
+  })
+}
+
+// Chunk processing helper
+const processInChunks = async <T>(
+  items: T[],
+  chunkSize: number,
+  processor: (item: T, index: number) => void
+): Promise<void> => {
+  for (let i = 0; i < items.length; i += chunkSize) {
+    const chunk = items.slice(i, i + chunkSize)
+    chunk.forEach((item, chunkIndex) => {
+      processor(item, i + chunkIndex)
+    })
+    
+    // Yield control every chunk to prevent UI blocking
+    if (i + chunkSize < items.length) {
+      await yieldToBrowser()
+    }
   }
+}
+
+// Calculate bounds từ geometry coordinates với tối ưu hóa
+const calculateBounds = async (geometries: GeometryData[], abortSignal?: AbortSignal): Promise<[[number, number], [number, number]] | undefined> => {
+  if (!geometries.length) return undefined
 
   let minLat = Infinity, minLng = Infinity
   let maxLat = -Infinity, maxLng = -Infinity
+  let hasValidCoords = false
 
-  geometries.forEach((geom, index) => {
-    console.log(`[KMLParser] Processing geometry ${index}:`, {
-      type: geom.type,
-      coordinates: geom.coordinates,
-      coordinatesLength: Array.isArray(geom.coordinates) ? geom.coordinates.length : 'not array'
-    })
+  const processCoordinate = (coord: number[]) => {
+    if (coord.length >= 2) {
+      const [lng, lat] = coord
+      if (typeof lng === 'number' && typeof lat === 'number' && !isNaN(lng) && !isNaN(lat)) {
+        minLat = Math.min(minLat, lat)
+        minLng = Math.min(minLng, lng)
+        maxLat = Math.max(maxLat, lat)
+        maxLng = Math.max(maxLng, lng)
+        hasValidCoords = true
+      }
+    }
+  }
+
+  const processCoordinates = (coords: unknown): void => {
+    if (Array.isArray(coords)) {
+      if (coords.length > 0 && typeof coords[0] === 'number') {
+        // Single coordinate [lng, lat]
+        processCoordinate(coords)
+      } else {
+        // Nested arrays
+        coords.forEach(c => processCoordinates(c))
+      }
+    }
+  }
+
+  // Process geometries in chunks to prevent UI blocking
+  await processInChunks(geometries, 100, (geom) => {
+    // Check cancellation in processing
+    if (abortSignal?.aborted) {
+      throw new Error('Operation cancelled')
+    }
     
-    const coords = geom.coordinates
-
-    const processCoordinate = (coord: number[]) => {
-      console.log('[KMLParser] Processing coordinate:', coord)
-      if (coord.length >= 2) {
-        const [lng, lat] = coord
-        console.log('[KMLParser] Extracted lng/lat:', { lng, lat })
-        if (typeof lng === 'number' && typeof lat === 'number' && !isNaN(lng) && !isNaN(lat)) {
-          minLat = Math.min(minLat, lat)
-          minLng = Math.min(minLng, lng)
-          maxLat = Math.max(maxLat, lat)
-          maxLng = Math.max(maxLng, lng)
-          console.log('[KMLParser] Updated bounds:', { minLat, minLng, maxLat, maxLng })
-        } else {
-          console.warn('[KMLParser] Invalid lng/lat values:', { lng, lat })
-        }
-      } else {
-        console.warn('[KMLParser] Coordinate has insufficient length:', coord)
-      }
-    }
-
-    const processCoordinates = (coords: unknown, depth = 0) => {
-      console.log(`[KMLParser] processCoordinates depth ${depth}:`, coords)
-      
-      if (Array.isArray(coords)) {
-        if (depth === 0 && typeof coords[0] === 'number') {
-          // Single coordinate [lng, lat]
-          console.log('[KMLParser] Found single coordinate array')
-          processCoordinate(coords)
-        } else {
-          // Nested arrays
-          console.log('[KMLParser] Found nested arrays, processing each item')
-          coords.forEach((c, i) => {
-            console.log(`[KMLParser] Processing nested item ${i}:`, c)
-            processCoordinates(c, depth + 1)
-          })
-        }
-      } else {
-        console.warn('[KMLParser] coords is not an array:', coords)
-      }
-    }
-
-    processCoordinates(coords)
+    processCoordinates(geom.coordinates)
   })
 
-  console.log('[KMLParser] Final bounds calculation:', { minLat, minLng, maxLat, maxLng })
-
-  if (minLat === Infinity) {
-    console.log('[KMLParser] No valid coordinates found, returning undefined')
-    return undefined
-  }
+  if (!hasValidCoords) return undefined
   
-  const result = [[minLat, minLng], [maxLat, maxLng]] as [[number, number], [number, number]]
-  console.log('[KMLParser] Calculated bounds result:', result)
-  return result
+  return [[minLat, minLng], [maxLat, maxLng]]
 }
 
 // Generate color cho từng loại geometry
@@ -97,15 +99,18 @@ const getColorForGeometryType = (type: string, index: number): string => {
   return typeColors[index % typeColors.length]
 }
 
-// Group geometries by type
-const groupGeometriesByType = (features: GeoJSON.Feature[]): Record<string, GeometryData[]> => {
+// Group geometries by type với tối ưu hóa
+const groupGeometriesByType = async (features: GeoJSON.Feature[], abortSignal?: AbortSignal): Promise<Record<string, GeometryData[]>> => {
   const groups: Record<string, GeometryData[]> = {}
 
-  features.forEach(feature => {
-    if (!feature.geometry) {
-      console.log('[KMLParser] Feature has no geometry, skipping')
-      return
+  // Process features in chunks to prevent UI blocking
+  await processInChunks(features, 50, (feature) => {
+    // Check cancellation in processing
+    if (abortSignal?.aborted) {
+      throw new Error('Operation cancelled')
     }
+    
+    if (!feature.geometry) return
 
     const geomType = feature.geometry.type
     if (!groups[geomType]) {
@@ -129,13 +134,12 @@ const groupGeometriesByType = (features: GeoJSON.Feature[]): Record<string, Geom
     if ('coordinates' in feature.geometry) {
       coordinates = feature.geometry.coordinates
     } else {
-      console.warn('[KMLParser] Geometry has no coordinates property:', feature.geometry)
       return
     }
 
     groups[geomType].push({
       type: geomType as GeometryData['type'],
-      coordinates: coordinates as number[] | number[][] | number[][][], // Proper coordinate type
+      coordinates: coordinates as number[] | number[][] | number[][][],
       properties
     })
   })
@@ -143,9 +147,14 @@ const groupGeometriesByType = (features: GeoJSON.Feature[]): Record<string, Geom
   return groups
 }
 
-// Parse KML content
-const parseKMLContent = async (xmlContent: string, fileName: string): Promise<ParsedKMLResult> => {
+// Parse KML content với tối ưu hóa
+const parseKMLContent = async (xmlContent: string, fileName: string, abortSignal?: AbortSignal): Promise<ParsedKMLResult> => {
   try {
+    // Check if cancelled before starting
+    if (abortSignal?.aborted) {
+      throw new Error('Operation cancelled')
+    }
+
     // Parse XML
     const parser = new DOMParser()
     const kmlDoc = parser.parseFromString(xmlContent, 'application/xml')
@@ -156,6 +165,11 @@ const parseKMLContent = async (xmlContent: string, fileName: string): Promise<Pa
       throw new Error('Invalid KML format')
     }
 
+    // Check cancellation after XML parsing
+    if (abortSignal?.aborted) {
+      throw new Error('Operation cancelled')
+    }
+
     // Convert to GeoJSON
     const geoJson = toGeoJSON.kml(kmlDoc)
     
@@ -163,31 +177,64 @@ const parseKMLContent = async (xmlContent: string, fileName: string): Promise<Pa
       throw new Error('No geometric features found in KML file')
     }
 
-    console.log(`[KMLParser] Successfully parsed ${geoJson.features.length} features from ${fileName}`)
+    // Yield control after initial parsing
+    await yieldToBrowser()
 
-    // Group geometries by type
-    const geometryGroups = groupGeometriesByType(geoJson.features.filter(f => f.geometry !== null) as GeoJSON.Feature<GeoJSON.Geometry>[])
+    // Check cancellation before processing
+    if (abortSignal?.aborted) {
+      throw new Error('Operation cancelled')
+    }
+
+    // Group geometries by type với chunking
+    const geometryGroups = await groupGeometriesByType(
+      geoJson.features.filter(f => f.geometry !== null) as GeoJSON.Feature<GeoJSON.Geometry>[],
+      abortSignal
+    )
+    
+    // Check cancellation after grouping
+    if (abortSignal?.aborted) {
+      throw new Error('Operation cancelled')
+    }
     
     // Create layers for each geometry type
     const layers: LayerData[] = []
-    Object.entries(geometryGroups).forEach(([type, geometries], index) => {
+    const groupEntries = Object.entries(geometryGroups)
+    
+    for (let i = 0; i < groupEntries.length; i++) {
+      const [type, geometries] = groupEntries[i]
+      
+      // Check cancellation in loop
+      if (abortSignal?.aborted) {
+        throw new Error('Operation cancelled')
+      }
+      
       if (geometries.length > 0) {
-        const layerBounds = calculateBounds(geometries)
+        const layerBounds = await calculateBounds(geometries, abortSignal)
         
         layers.push({
-          id: `${type.toLowerCase()}-${Date.now()}-${index}`,
+          id: `${type.toLowerCase()}-${Date.now()}-${i}`,
           name: `${type} (${geometries.length})`,
           visible: true,
-          color: getColorForGeometryType(type, index),
+          color: getColorForGeometryType(type, i),
           geometry: geometries,
           bounds: layerBounds
         })
       }
-    })
+      
+      // Yield control after processing each layer
+      if (i < groupEntries.length - 1) {
+        await yieldToBrowser()
+      }
+    }
+
+    // Check cancellation before final step
+    if (abortSignal?.aborted) {
+      throw new Error('Operation cancelled')
+    }
 
     // Calculate overall bounds
     const allGeometries = Object.values(geometryGroups).flat()
-    const overallBounds = calculateBounds(allGeometries)
+    const overallBounds = await calculateBounds(allGeometries, abortSignal)
 
     const layerGroup: LayerGroup = {
       id: `group-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
@@ -203,6 +250,16 @@ const parseKMLContent = async (xmlContent: string, fileName: string): Promise<Pa
     }
 
   } catch (error) {
+    // Handle cancellation
+    if (error instanceof Error && (error.message === 'Operation cancelled' || error.name === 'AbortError')) {
+      console.log(`[KMLParser] Content parsing cancelled for ${fileName}`)
+      return {
+        layerGroup: {} as LayerGroup,
+        success: false,
+        error: 'Operation cancelled'
+      }
+    }
+    
     console.error('[KMLParser] Error parsing KML:', error)
     return {
       layerGroup: {} as LayerGroup,
@@ -213,10 +270,20 @@ const parseKMLContent = async (xmlContent: string, fileName: string): Promise<Pa
 }
 
 // Parse KMZ file (ZIP containing KML)
-const parseKMZContent = async (file: File): Promise<ParsedKMLResult> => {
+const parseKMZContent = async (file: File, abortSignal?: AbortSignal): Promise<ParsedKMLResult> => {
   try {
+    // Check if cancelled before starting
+    if (abortSignal?.aborted) {
+      throw new Error('Operation cancelled')
+    }
+
     const zip = new JSZip()
     const zipContent = await zip.loadAsync(file)
+    
+    // Check cancellation after loading ZIP
+    if (abortSignal?.aborted) {
+      throw new Error('Operation cancelled')
+    }
     
     // Find KML file in ZIP
     let kmlFile: JSZip.JSZipObject | null = null
@@ -231,10 +298,25 @@ const parseKMZContent = async (file: File): Promise<ParsedKMLResult> => {
       throw new Error('No KML file found in KMZ archive')
     }
 
+    // Check cancellation before reading KML content
+    if (abortSignal?.aborted) {
+      throw new Error('Operation cancelled')
+    }
+
     const kmlContent = await (kmlFile as JSZip.JSZipObject).async('text')
-    return parseKMLContent(kmlContent, file.name)
+    return parseKMLContent(kmlContent, file.name, abortSignal)
 
   } catch (error) {
+    // Handle cancellation
+    if (error instanceof Error && (error.message === 'Operation cancelled' || error.name === 'AbortError')) {
+      console.log(`[KMLParser] KMZ parsing cancelled for ${file.name}`)
+      return {
+        layerGroup: {} as LayerGroup,
+        success: false,
+        error: 'Operation cancelled'
+      }
+    }
+    
     console.error('[KMLParser] Error parsing KMZ:', error)
     return {
       layerGroup: {} as LayerGroup,
@@ -245,17 +327,28 @@ const parseKMZContent = async (file: File): Promise<ParsedKMLResult> => {
 }
 
 // Main parser function
-export const parseKMLFile = async (file: File): Promise<ParsedKMLResult> => {
+export const parseKMLFile = async (file: File, abortSignal?: AbortSignal): Promise<ParsedKMLResult> => {
   const fileExtension = file.name.toLowerCase().split('.').pop()
   
-  console.log(`[KMLParser] Starting to parse ${file.name} (${file.size} bytes)`)
+  console.log(`[KMLParser] Starting to parse ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`)
 
   try {
+    // Check if cancelled before starting
+    if (abortSignal?.aborted) {
+      throw new Error('Operation cancelled')
+    }
+
     if (fileExtension === 'kmz') {
-      return await parseKMZContent(file)
+      return await parseKMZContent(file, abortSignal)
     } else if (fileExtension === 'kml') {
       const content = await file.text()
-      return await parseKMLContent(content, file.name)
+      
+      // Check cancellation after reading file
+      if (abortSignal?.aborted) {
+        throw new Error('Operation cancelled')
+      }
+      
+      return await parseKMLContent(content, file.name, abortSignal)
     } else {
       return {
         layerGroup: {} as LayerGroup,
@@ -264,6 +357,16 @@ export const parseKMLFile = async (file: File): Promise<ParsedKMLResult> => {
       }
     }
   } catch (error) {
+    // Handle cancellation
+    if (error instanceof Error && (error.message === 'Operation cancelled' || error.name === 'AbortError')) {
+      console.log(`[KMLParser] Parsing cancelled for ${file.name}`)
+      return {
+        layerGroup: {} as LayerGroup,
+        success: false,
+        error: 'Operation cancelled'
+      }
+    }
+    
     console.error('[KMLParser] File processing error:', error)
     return {
       layerGroup: {} as LayerGroup,

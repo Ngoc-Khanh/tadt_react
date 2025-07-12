@@ -6,8 +6,9 @@ export interface ImportedFile {
   name: string
   size: number
   type: string
-  status: 'pending' | 'success' | 'error'
+  status: 'pending' | 'success' | 'error' | 'cancelled'
   progress: number
+  cancelled?: boolean // Flag để track cancel state
 }
 
 export interface GeometryData {
@@ -142,6 +143,23 @@ export const updateFileAtom = atom(
   }
 )
 
+export const cancelFileAtom = atom(
+  null,
+  (get, set, fileId: string) => {
+    set(filesAtom, 
+      get(filesAtom).map(f => 
+        f.id === fileId ? { 
+          ...f, 
+          cancelled: true, 
+          status: 'cancelled' as const,
+          progress: 0 
+        } : f
+      )
+    )
+    console.log(`[cancelFileAtom] Cancelled file: ${fileId}`)
+  }
+)
+
 export const removeFileAtom = atom(
   null,
   (get, set, fileId: string) => {
@@ -153,6 +171,23 @@ export const clearAllFilesAtom = atom(
   null,
   (get, set) => {
     set(filesAtom, [])
+  }
+)
+
+export const retryFileAtom = atom(
+  null,
+  (get, set, fileId: string) => {
+    set(filesAtom, 
+      get(filesAtom).map(f => 
+        f.id === fileId ? { 
+          ...f, 
+          status: 'pending' as const,
+          progress: 0,
+          cancelled: false 
+        } : f
+      )
+    )
+    console.log(`[retryFileAtom] Retrying file: ${fileId}`)
   }
 )
 

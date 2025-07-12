@@ -338,7 +338,7 @@ export function ConfirmImportDialog({
                       </Box>
                     }
                     secondary={
-                      <Typography variant="body2" color="text.secondary">
+                      <Typography variant="body2" color="text.secondary" component="span">
                         Layer: {assignment.layerName} • LineString: {assignment.lineStringId}
                       </Typography>
                     }

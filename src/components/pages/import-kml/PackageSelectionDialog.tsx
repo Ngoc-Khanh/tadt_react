@@ -217,10 +217,10 @@ export function PackageSelectionDialog() {
                     }
                     secondary={
                       <Box sx={{ mt: 1 }}>
-                        <Typography variant="body2" color="text.secondary">
+                        <Typography variant="body2" color="text.secondary" component="span" sx={{ display: 'block' }}>
                           ID: {pkg.package_id}
                         </Typography>
-                        <Typography variant="body2" color="text.secondary">
+                        <Typography variant="body2" color="text.secondary" component="span" sx={{ display: 'block' }}>
                           Tiến độ: {pkg.tien_do_thuc_te}%
                         </Typography>
                       </Box>

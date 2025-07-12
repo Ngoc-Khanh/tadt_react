@@ -161,32 +161,7 @@ const LayerRenderer = React.memo(({
   }, [layer.color, layer.name, selectedFeatures])
 
   const onEachFeature = useCallback((feature: GeoJSON.Feature, leafletLayer: L.Layer) => {
-    // Bind popup với thông tin feature
-    if (feature.properties && Object.keys(feature.properties).length > 0) {
-      const entries = Object.entries(feature.properties)
-      const popupContent = `
-        <div style="font-family: 'Roboto', sans-serif; max-width: 300px;">
-          <div style="background: linear-gradient(135deg, #1976d2, #1565c0); color: white; padding: 12px; margin: -10px -10px 10px -10px; border-radius: 8px 8px 0 0;">
-            <h4 style="margin: 0; font-size: 14px; font-weight: 600;">Chi tiết Feature</h4>
-          </div>
-          <div style="padding: 4px 0;">
-            ${entries.map(([key, value]) => 
-              `<div style="margin: 8px 0; padding: 6px; background: #f5f5f5; border-radius: 4px; border-left: 3px solid #1976d2;">
-                <strong style="color: #1976d2; font-size: 12px; text-transform: uppercase;">${key}:</strong><br>
-                <span style="color: #333; font-size: 13px;">${value}</span>
-              </div>`
-            ).join('')}
-          </div>
-        </div>
-      `
-      
-      leafletLayer.bindPopup(popupContent, {
-        maxWidth: 350,
-        className: 'custom-popup'
-      })
-    }
-
-        // Handle click event cho feature selection
+    // Handle click event cho feature selection
     leafletLayer.on('click', (e) => {
       const featureId = feature.id?.toString() || `${groupId}-${layer.id}-${Date.now()}`
       
@@ -217,26 +192,85 @@ const LayerRenderer = React.memo(({
         setSelectedFeatures(newSelection)
       }
       
-      // For LineString, also trigger package selection dialog
-      if (feature.geometry?.type === 'LineString') {
-        const selectedLineString: SelectedLineString = {
-          featureId: featureId,
-          layerId: layer.id,
-          groupId: groupId,
-          properties: feature.properties || {},
-          geometry: {
-            type: feature.geometry.type as 'LineString',
-            coordinates: feature.geometry.coordinates,
-            properties: feature.properties || {}
-          }
-        }
-        
-        setSelectedLineString(selectedLineString)
-      }
-      
       // Prevent event bubbling
       e.originalEvent.stopPropagation()
     })
+
+    // Thêm popup cho LineString
+    if (feature.geometry?.type === 'LineString') {
+      const featureId = feature.id?.toString() || `${groupId}-${layer.id}-${Date.now()}`
+      
+      leafletLayer.bindPopup(() => {
+        const popupDiv = document.createElement('div')
+        popupDiv.innerHTML = `
+          <div style="padding: 8px; min-width: 200px;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+              <div style="color: #1976d2;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm2 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
+                </svg>
+              </div>
+              <div style="font-weight: 600; color: #1976d2;">LineString</div>
+            </div>
+            <div style="margin-bottom: 12px;">
+              <div style="font-size: 12px; color: #666; margin-bottom: 4px;">Feature ID:</div>
+              <div style="font-size: 14px; font-weight: 500;">${featureId}</div>
+            </div>
+            <button 
+              id="assign-package-btn-${featureId}" 
+              style="
+                background: #1976d2;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 6px;
+                cursor: pointer;
+                font-size: 14px;
+                font-weight: 500;
+                width: 100%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 6px;
+              "
+              onmouseover="this.style.background='#1565c0'"
+              onmouseout="this.style.background='#1976d2'"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm2 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
+              </svg>
+              Đính gói thầu
+            </button>
+          </div>
+        `
+        
+        // Thêm event listener cho button sau khi popup được render
+        setTimeout(() => {
+          const button = document.getElementById(`assign-package-btn-${featureId}`)
+          if (button) {
+            button.addEventListener('click', () => {
+                             // Tạo selectedLineString và mở dialog
+               const selectedLineString: SelectedLineString = {
+                 featureId: featureId,
+                 layerId: layer.id,
+                 groupId: groupId,
+                 properties: feature.properties || {},
+                 geometry: {
+                   type: feature.geometry!.type as 'LineString',
+                   coordinates: (feature.geometry as GeoJSON.LineString)!.coordinates,
+                   properties: feature.properties || {}
+                 }
+               }
+              
+              setSelectedLineString(selectedLineString)
+              leafletLayer.closePopup() // Đóng popup sau khi mở dialog
+            })
+          }
+        }, 50)
+        
+        return popupDiv
+      })
+    }
   }, [layer.id, groupId, groupName, layer.name, setSelectedLineString, selectedFeatures, setSelectedFeatures])
 
   if (!geoJsonData) return null

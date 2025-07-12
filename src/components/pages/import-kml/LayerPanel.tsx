@@ -1,11 +1,12 @@
+import type { LayerData } from '@/stores/importKMLAtoms'
 import {
+  fitToGroupAtom,
+  fitToLayerAtom,
   layerGroupsAtom,
   toggleLayerGroupVisibilityAtom,
-  toggleLayerVisibilityAtom,
-  fitToLayerAtom,
-  fitToGroupAtom
+  toggleLayerVisibilityAtom
 } from '@/stores/importKMLAtoms'
-import { Layers, Visibility, VisibilityOff, Info, MyLocation, Explore } from '@mui/icons-material'
+import { Explore, Layers, MyLocation, Visibility, VisibilityOff } from '@mui/icons-material'
 import {
   Alert,
   Box,
@@ -19,13 +20,12 @@ import {
   ListItemText,
   Paper,
   Switch,
-  Typography,
-  Tooltip
+  Tooltip,
+  Typography
 } from '@mui/material'
 import { useAtom, useSetAtom } from 'jotai'
 import { useState } from 'react'
 import { GeometryDetailDialog } from './GeometryDetailDialog'
-import type { LayerData } from '@/stores/importKMLAtoms'
 
 export function LayerPanel() {
   const [layerGroups] = useAtom(layerGroupsAtom)
@@ -39,10 +39,10 @@ export function LayerPanel() {
   const [selectedLayer, setSelectedLayer] = useState<LayerData | null>(null)
 
   // Handler để mở geometry detail dialog
-  const handleShowGeometryDetails = (layer: LayerData) => {
-    setSelectedLayer(layer)
-    setGeometryDialogOpen(true)
-  }
+  // const handleShowGeometryDetails = (layer: LayerData) => {
+  //   setSelectedLayer(layer)
+  //   setGeometryDialogOpen(true)
+  // }
 
   // Handler để đóng dialog
   const handleCloseGeometryDialog = () => {
@@ -220,7 +220,7 @@ export function LayerPanel() {
                             }
                             secondary={
                               layer.bounds && (
-                                <Typography variant="caption" color="text.secondary">
+                                <Typography variant="caption" color="text.secondary" component="span">
                                   Bounds: {layer.bounds[0][0].toFixed(4)}, {layer.bounds[0][1].toFixed(4)}
                                 </Typography>
                               )
@@ -242,7 +242,7 @@ export function LayerPanel() {
                                 </IconButton>
                               </Tooltip>
                               
-                              {layer.geometry && layer.geometry.length > 0 && (
+                              {/* {layer.geometry && layer.geometry.length > 0 && (
                                 <Tooltip title={`${layer.geometry.length} features - Click để xem chi tiết tất cả đối tượng`}>
                                   <IconButton 
                                     size="small" 
@@ -252,7 +252,7 @@ export function LayerPanel() {
                                     <Info fontSize="small" />
                                   </IconButton>
                                 </Tooltip>
-                              )}
+                              )} */}
                               
                               <Tooltip title={layer.visible ? 'Ẩn layer' : 'Hiện layer'}>
                                 <IconButton
