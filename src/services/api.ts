@@ -1,45 +1,51 @@
 import { siteConfig } from "@/config";
-import { getAccessToken } from "@/lib/get-token";
+import { getToken, removeToken, setToken } from "@/lib/access-token";
 import axios, { type AxiosRequestConfig, type AxiosResponse } from "axios";
 import { AuthAPI } from "./auth.api";
 
 const api = axios.create({
-  baseURL: siteConfig.backend.base_url,
-  headers: siteConfig.backend.base_headers
+  baseURL: `${import.meta.env.VITE_API_URL}/api`,
+  headers: siteConfig.backend.base_headers,
 })
 
-// Add a request interceptor to include the JWT token in the headers
+// Thêm request interceptor để tự động gắn JWT token vào headers
 api.interceptors.request.use(
   async (config) => {
-    const token = await getAccessToken();
+    const token = await getToken();
     if (token) config.headers.Authorization = `Bearer ${token}`;
-    config.headers.Authorization = `Bearer eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1lIjoibWFwc2FwaSIsIm9yZ2lkIjoiIiwiaWF0Ijo2Mzg4NzczMDM5MjUxODQzOTEsInVzZXJpZCI6ImIyNDM4ZTAxLTZmYjItNDc5Ni05NDFjLWQwNWMyZWNiNDhkNSIsInVzZXJuYW1lIjoibWFwc2FwaSIsImZ1bGxuYW1lIjoiTWFwcyBBUEkiLCJvcmdjb2RlIjoiIiwib3JnbmFtZSI6IiIsImV4cCI6MTc1MjE2Njc5OX0.7zgegNyI7uAcRYq54BcyISRWUKTEeSZgUrGB5oGK9EIAXJXW03f-L2MEs8KPjqbW6sBZNw6ie6tT3hQOuIqQpg`;
+    console.log(`[API] ${config.method?.toUpperCase()} ${config.url}`, {
+      baseURL: config.baseURL,
+      headers: config.headers,
+    });
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => {
+    console.error(`[API] Request error:`, error);
+    return Promise.reject(error);
+  }
 )
 
+// Tự động đăng nhập khi gặp lỗi 401
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     if (error.response?.status === 401) {
-      console.log('[API] Token expired, attempting auto re-login');
+      console.log(`[API] Token expired, attempting to refresh...`);
       try {
         const res = await AuthAPI.login({
-          UserName: 'mapsapi',
-          Password: '123456'
+          UserName: "mapsapi",
+          Password: "123456"
         })
         if (res.Token) {
-          localStorage.setItem(siteConfig.auth.jwt_key, res.Token);
-          error.config.headers.Authorization = `Bearer ${res.Token}`;
+          setToken(res.Token);
           return api.request(error.config);
         }
       } catch (refreshError) {
-        console.error('[API] Auto re-login failed:', refreshError);
-        localStorage.removeItem(siteConfig.auth.jwt_key);
+        console.error(`[API] Token refresh failed:`, refreshError);
+        removeToken();
       }
+      return Promise.reject(error);
     }
-    return Promise.reject(error);
   }
 )
 

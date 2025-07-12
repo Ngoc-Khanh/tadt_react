@@ -17,7 +17,7 @@ function CustomTabPanel(props: TabPanelProps) {
       aria-labelledby={`simple-tab-${index}`}
       {...other}
     >
-      {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
+      {value === index && <Box>{children}</Box>}
     </div>
   );
 }
@@ -31,4 +31,3 @@ function a11yProps(index: number) {
 
 // eslint-disable-next-line react-refresh/only-export-components
 export { a11yProps, CustomTabPanel };
-

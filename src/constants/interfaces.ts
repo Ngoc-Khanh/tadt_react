@@ -8,7 +8,7 @@ export interface ICredentialResponse {
   ErrorMessage: string | null;
 }
 
-export interface IMapResponse {
+export interface IProjectResponse {
   project_id: string;
   ten_du_an: string;
   trang_thai: EStatusType;
@@ -17,7 +17,7 @@ export interface IMapResponse {
   anh_tong_quan: string;
 }
 
-export interface IMapDetailResponse {
+export interface IProjectDetailResponse {
   project_id: string;
   ten_du_an: string;
   ngay_bd_ke_hoach: string;
