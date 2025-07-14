@@ -1,0 +1,72 @@
+---
+alwaysApply: true
+---
+# RULES: WORKFLOW BẢN ĐỒ DỰ ÁN GIS
+# MỤC TIÊU: Quản lý dữ liệu KML/KMZ theo dự án, import vào bản đồ chính Leaflet, gán gói thầu, theo dõi tiến độ bằng màu sắc
+
+---
+[0] AUTH + PROJECT SELECTION
+- Người dùng cần chọn một dự án (project) trước khi thực hiện bất kỳ hành động nào.
+- selectedProjectAtom = null => chặn thao tác upload
+- TanStackQuery: fetch danh sách dự án -> hiển thị select box
+
+---
+[1] UPLOAD KML/KMZ
+- Người dùng được phép upload file KML hoặc KMZ sau khi chọn dự án
+- File được parse => GeoJSON
+- Từ GeoJSON tách thành các `layers`, có thể là:
+  - LineString
+  - Polygon
+- Lưu danh sách `ParsedLayer[]` vào parsedLayersAtom
+
+---
+[2] LAYER SELECTION + MANAGEMENT
+- Cho phép chọn từng layer trong danh sách (select layer UI)
+- selectedLayerAtom: dùng để hiển thị thông tin layer đang thao tác
+- Có thể rename, hiển thị thuộc tính mô tả, preview trên bản đồ tạm
+
+---
+[3] ATTACH GÓI THẦU CHO LAYER (LineString/Polygon)
+- Khi chọn một LineString -> mở dialog chọn gói thầu
+- Dùng selectedLineStringAtom để lưu layer đang chọn
+- Fetch danh sách gói thầu từ API theo regionId của dự án
+- Người dùng có thể gắn một hoặc nhiều gói thầu vào một line
+- attachedPackagesAtom: lưu danh sách gói gắn vào layer đó
+
+---
+[4] IMPORT VÀO BẢN ĐỒ CHÍNH
+- Sau khi gắn xong, layer sẽ được import vào bản đồ chính
+- Lưu dưới dạng GeoJSON features, mỗi feature có kèm metadata:
+  - project_id
+  - region_id
+  - packages[]
+  - status (not_started, in_progress_on_time, ...)
+- Layer được hiển thị trên Leaflet
+
+---
+[5] HIỂN THỊ TRẠNG THÁI TIẾN ĐỘ (MÀU SẮC)
+- Mỗi linestring/polygon sẽ có màu theo trạng thái:
+  - not_started -> xám (#9CA3AF)
+  - in_progress_on_time -> xanh nước biển (#0EA5E9)
+  - in_progress_delayed -> vàng (#FACC15)
+  - done_on_time -> xanh lá (#22C55E)
+  - done_delayed -> đỏ (#EF4444)
+
+---
+[6] QUẢN LÝ CÁC VÙNG ĐÃ IMPORT
+- Button "Quản lý vùng" hiển thị danh sách các vùng (regions) của project
+- Fetch từ API (theo projectId)
+- Cho phép chọn 1 vùng => focus vào vị trí tương ứng trên bản đồ
+- Hiển thị popup với thông tin:
+  - Tên vùng
+  - Tiến độ tổng quan
+  - Button "Xem chi tiết"
+
+---
+[7] XEM CHI TIẾT VÙNG
+- Bấm "Xem chi tiết" => gọi API lấy full thông tin vùng:
+  - Số lượng tuyến
+  - % hoàn thành
+  - Gói thầu kèm theo
+  - Các tuyến gắn kèm trạng thái
+- Mở ở dạng dialog hoặc page riêng

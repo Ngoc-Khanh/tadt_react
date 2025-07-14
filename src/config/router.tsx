@@ -1,7 +1,7 @@
 import { routes } from "@/config";
 import MainLayout from "@/layouts/main";
-import RootPage from "@/pages/Root";
-import type { RouteObject } from "react-router-dom";
+import { ProjectDetailPage, ProjectPage } from "@/pages";
+import { Navigate, type RouteObject } from "react-router-dom";
 
 export const reactRouter: RouteObject[] = [
   {
@@ -9,8 +9,16 @@ export const reactRouter: RouteObject[] = [
     children: [
       {
         path: routes.root,
-        element: <RootPage />,
+        element: <Navigate to={routes.project} />,
       },
+      {
+        path: routes.project,
+        element: <ProjectPage />,
+      },
+      {
+        path: routes.projectDetail(":projectId"),
+        element: <ProjectDetailPage />,
+      }
     ],
   },
 
