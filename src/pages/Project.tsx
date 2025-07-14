@@ -1,68 +1,14 @@
+import { ProjectError, ProjectLoading } from "@/components/pages/project";
 import { ProjectCard } from "@/components/pages/project/project-card";
 import { useProjects } from "@/services/hooks";
-import {
-  Alert,
-  Box,
-  CircularProgress,
-  Container,
-  Paper,
-  Stack,
-  Typography,
-  useTheme
-} from "@mui/material";
+import { Box, Container, Paper, Typography } from "@mui/material";
 
 export default function ProjectPage() {
   const { data: projects, isLoading, error } = useProjects();
-  const theme = useTheme();
 
-  if (isLoading) {
-    return (
-      <Box
-        sx={{
-          minHeight: "100vh",
-          bgcolor: "grey.50",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <Stack alignItems="center" spacing={2}>
-          <CircularProgress size={60} />
-          <Typography color="text.secondary">Đang tải dự án...</Typography>
-        </Stack>
-      </Box>
-    );
-  }
+  if (isLoading) return <ProjectLoading />
 
-  if (error) {
-    return (
-      <Box
-        sx={{
-          minHeight: "100vh",
-          bgcolor: "grey.50",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <Container maxWidth="sm">
-          <Alert
-            severity="error"
-            sx={{
-              p: 3,
-              borderRadius: 3,
-              boxShadow: theme.shadows[3],
-            }}
-          >
-            <Typography variant="h6" gutterBottom>
-              Có lỗi xảy ra
-            </Typography>
-            <Typography variant="body2">{error.message}</Typography>
-          </Alert>
-        </Container>
-      </Box>
-    );
-  }
+  if (error) return <ProjectError error={error} />
 
   return (
     <Box sx={{ bgcolor: "grey.50" }}>
