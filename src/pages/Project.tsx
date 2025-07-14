@@ -1,6 +1,6 @@
 import { ProjectError, ProjectLoading } from "@/components/pages/project";
 import { ProjectCard } from "@/components/pages/project/project-card";
-import { useProjects } from "@/services/hooks";
+import { useProjects } from "@/hooks";
 import { Box, Container, Paper, Typography } from "@mui/material";
 
 export default function ProjectPage() {
@@ -11,8 +11,8 @@ export default function ProjectPage() {
   if (error) return <ProjectError error={error} />
 
   return (
-    <Box sx={{ bgcolor: "grey.50" }}>
-      <Container maxWidth="xl" sx={{ py: 4 }}>
+    <Box sx={{ bgcolor: "grey.50", height: "100vh" }}>
+      <Container maxWidth="xl" sx={{ py: 4, height: "100%" }}>
         {projects && projects.length > 0 ? (
           <Box
             sx={{

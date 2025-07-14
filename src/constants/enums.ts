@@ -8,3 +8,10 @@ export const EStatus = {
 } as const;
 
 export type EStatusType = typeof EStatus[keyof typeof EStatus];
+
+export const EMapType = {
+  LINE_STRING: 'LineString',
+  POLYGON: 'Polygon'
+} as const;
+
+export type EMapTypeType = typeof EMapType[keyof typeof EMapType];

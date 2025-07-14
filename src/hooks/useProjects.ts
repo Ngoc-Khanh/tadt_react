@@ -20,8 +20,10 @@ export const useProjectDetail = (projectId: string) => {
     queryKey: ['project', projectId],
     queryFn: async () => {
       const response = await ProjectAPI.getProjectDetail(projectId)
-      if (response.IsSuccess && response.Data) return response.Data
-      else throw new Error(response.ErrorMessage || 'Failed to fetch project detail')
+      if (response.IsSuccess && response.Data) {
+        if (Array.isArray(response.Data)) return response.Data[0]
+        return response.Data
+      } else throw new Error(response.ErrorMessage || 'Failed to fetch project detail')
     },
     enabled: !!projectId,
     staleTime: 5 * 60 * 1000,
