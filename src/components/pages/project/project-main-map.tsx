@@ -1,11 +1,19 @@
 import { useMockMapData } from '@/hooks';
+import { 
+  selectedZoneAtom, 
+  selectedPackageAtom,
+  sidePanelOpenAtom,
+  selectedPackageIdForPanelAtom
+} from '@/stores';
 import { Box } from '@mui/material';
+import { useAtom } from 'jotai';
 import { Map as LeafletMapType } from 'leaflet';
 import React, { useEffect, useRef, useState } from 'react';
 import { MapContainer, TileLayer } from 'react-leaflet';
 import { LayerButton } from './layer-button';
 import { LayerPopper } from './layer-popper';
 import { MapLayers } from './map-layers';
+import { PackageDetailPanel } from './package-detail-panel';
 import { ProjectError } from './project-error';
 import { ProjectLoading } from './project-loading';
 
@@ -19,8 +27,25 @@ export function ProjectMainMap({ projectId }: { projectId: string }) {
   const [visibleZones, setVisibleZones] = useState<Set<string>>(new Set())
   const open = Boolean(anchorEl)
 
-  const [selectedZone, setSelectedZone] = useState<string | null>(null)
-  const [selectedPackage, setSelectedPackage] = useState<string | null>(null)
+  // Sử dụng atoms cho selected zone/package
+  const [selectedZone, setSelectedZone] = useAtom(selectedZoneAtom)
+  const [selectedPackage, setSelectedPackage] = useAtom(selectedPackageAtom)
+  const [sidePanelOpen, setSidePanelOpen] = useAtom(sidePanelOpenAtom)
+  const [selectedPackageId, setSelectedPackageId] = useAtom(selectedPackageIdForPanelAtom)
+  
+  // Handle view details - open side panel
+  const handleViewDetails = (packageId: string) => {
+    setSelectedPackageId(packageId)
+    setSidePanelOpen(true)
+    // Đóng popup nếu đang mở
+    setSelectedPackage(null)
+  }
+
+  // Handle close panel
+  const handleClosePanel = () => {
+    setSidePanelOpen(false)
+    setSelectedPackageId(null)
+  }
 
   // Initialize visibility when data loads
   useEffect(() => {
@@ -83,9 +108,16 @@ export function ProjectMainMap({ projectId }: { projectId: string }) {
           selectedPackage={selectedPackage}
           onZoneClick={setSelectedZone}
           onPackageClick={setSelectedPackage}
-          onViewDetails={setSelectedPackage}
+          onViewDetails={handleViewDetails}
         />
       </MapContainer>
+
+      {/* Package Detail Side Panel */}
+      <PackageDetailPanel
+        open={sidePanelOpen}
+        onClose={handleClosePanel}
+        packageId={selectedPackageId}
+      />
     </Box>
   )
 }

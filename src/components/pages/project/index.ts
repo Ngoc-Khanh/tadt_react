@@ -3,6 +3,7 @@ export { LayerPopper } from './layer-popper';
 export { LeafletMap } from './leaflet-map';
 export { PackageGeometry } from './package-geometry';
 export { PackagePopup } from './package-popup';
+export { PackageDetailPanel } from './package-detail-panel';
 export { ProjectCard } from './project-card';
 export { ProjectError } from './project-error';
 export { ProjectImporting } from './project-importing';

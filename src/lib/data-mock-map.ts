@@ -1,4 +1,4 @@
-import type { IMapMockResponse } from "@/constants/mock";
+import type { IMapMockResponse, IPackageMockDetailResponse } from "@/constants/mock";
 import type { SRO } from "@/constants/sro";
 
 export const mockMapData: SRO<IMapMockResponse[]> = {
@@ -908,6 +908,35 @@ export const mockMapData: SRO<IMapMockResponse[]> = {
             },
           ],
         },
+      ],
+    },
+  ],
+};
+
+export const dataMockPackageDetail: SRO<IPackageMockDetailResponse[]> = {
+  IsSuccess: true,
+  StatusCode: "200",
+  ErrorMessage: null,
+  Data: [
+    {
+      package_id: "555bc832-e348-4b56-b347-4fd09716bb70",
+      ten_goi_thau: "MeySPa",
+      ngay_bd_ke_hoach: "2024-01-01",
+      ngay_kt_ke_hoach: "2027-12-31",
+      tien_do_thuc_te: 14.2857,
+      tien_do_ke_hoach: 100.0,
+      danh_sach_goi_thau: ["Gói thầu thi công hạ tầng"],
+    },
+    {
+      package_id: "e4b20297-a9fc-43b1-9ef5-f271c12f346d",
+      ten_goi_thau: "Mini Hotel",
+      ngay_bd_ke_hoach: "2024-01-01",
+      ngay_kt_ke_hoach: "2027-12-31",
+      tien_do_thuc_te: 100.0,
+      tien_do_ke_hoach: 0.0,
+      danh_sach_goi_thau: [
+        "Cảnh quan cây xanh - Cây xanh",
+        "Cảnh quan cây xanh - Giàn thép hoa giấy",
       ],
     },
   ],
