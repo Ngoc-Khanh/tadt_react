@@ -1,20 +1,21 @@
-import { ProjectError, ProjectLeafletMap, ProjectLoading } from "@/components/pages/project";
+import { ProjectError, ProjectImporting, ProjectLeafletMap, ProjectLoading } from "@/components/pages/project";
 import { routes } from "@/config";
 import { useProjectDetail } from "@/hooks";
 import { KeyboardArrowLeft, Layers, Map } from "@mui/icons-material";
 import { Box, Button, Chip, IconButton, Paper, Tooltip, Typography } from "@mui/material";
+import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 export default function ProjectDetailPage() {
-  const { projectId } = useParams<{ projectId: string }>()
   const navigate = useNavigate()
+  const { projectId } = useParams<{ projectId: string }>()
   const { data: project, isLoading, error } = useProjectDetail(projectId!)
+  const [isImporting, setIsImporting] = useState<boolean>(false)
+
+  if (isImporting) return <ProjectImporting projectId={projectId} />
 
   if (isLoading) return <ProjectLoading />
-
   if (error) return <ProjectError error={error} />
-
-  console.log(project)
 
   return (
     <Box className="flex flex-col bg-gray-50">
@@ -53,12 +54,19 @@ export default function ProjectDetailPage() {
           </Box>
         </Box>
 
-        <Box className="flex gap-1">
-          <Tooltip title="Thêm dữ liệu vào bản đồ">
+        <Box className="flex gap-2 p-2">
+          <Tooltip title="Import dữ liệu vào bản đồ chính">
             <Button
               startIcon={<Layers />}
               variant="outlined"
               size="small"
+              sx={{
+                px: 3,
+                borderRadius: 2,
+                textTransform: 'none',
+                fontWeight: 600,
+              }}
+              onClick={() => setIsImporting(true)}
             >
               Thêm dữ liệu vào bản đồ
             </Button>
