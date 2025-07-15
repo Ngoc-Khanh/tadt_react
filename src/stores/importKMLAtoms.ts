@@ -110,6 +110,42 @@ export const addLayerGroupAtom = atom(
   }
 )
 
+export const toggleLayerVisibilityAtom = atom(
+  null,
+  (get, set, { groupId, layerId }: { groupId: string; layerId: string }) => {
+    const currentGroups = get(layerGroupsAtom)
+    const updatedGroups = currentGroups.map(group => {
+      if (group.id === groupId) {
+        return {
+          ...group,
+          layers: group.layers.map(layer => {
+            if (layer.id === layerId) {
+              return { ...layer, visible: !layer.visible }
+            }
+            return layer
+          })
+        }
+      }
+      return group
+    })
+    set(layerGroupsAtom, updatedGroups)
+  }
+)
+
+export const toggleGroupVisibilityAtom = atom(
+  null,
+  (get, set, groupId: string) => {
+    const currentGroups = get(layerGroupsAtom)
+    const updatedGroups = currentGroups.map(group => {
+      if (group.id === groupId) {
+        return { ...group, visible: !group.visible }
+      }
+      return group
+    })
+    set(layerGroupsAtom, updatedGroups)
+  }
+)
+
 export const addSuccessfulFileAtom = atom(
   null,
   (get, set, file: SuccessfulFile) => {

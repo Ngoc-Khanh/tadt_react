@@ -12,7 +12,7 @@ export default function ProjectDetailPage() {
   const { data: project, isLoading, error } = useProjectDetail(projectId!)
   const [isImporting, setIsImporting] = useState<boolean>(false)
 
-  if (isImporting) return <ProjectImporting projectId={projectId} />
+  if (isImporting) return <ProjectImporting />
 
   if (isLoading) return <ProjectLoading />
   if (error) return <ProjectError error={error} />

@@ -1,5 +1,6 @@
 import { type Layer, type LayerGeometry, type LayerGroup } from '@/stores/importKMLAtoms'
 import JSZip from 'jszip'
+import { calculateBoundsFromGeometries } from './get-lat-lags-from-geom'
 
 // Parse KML text to GeoJSON-like structure
 function parseKMLToGeoJSON(kmlText: string): LayerGeometry[] {
@@ -95,13 +96,9 @@ function parseCoordinates(coordinatesText: string): number[][] {
     .filter(coord => !isNaN(coord[0]) && !isNaN(coord[1]))
 }
 
-// Generate random color cho layer
-function generateRandomColor(): string {
-  const colors = [
-    '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
-    '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9'
-  ]
-  return colors[Math.floor(Math.random() * colors.length)]
+// Generate default color cho layer
+function generateDefaultColor(): string {
+  return '#1976d2' // MUI primary blue
 }
 
 // Main function để xử lý file KML/KMZ
@@ -145,30 +142,8 @@ export async function parseKMLFile(file: File): Promise<LayerGroup> {
     layerMap.get(key)!.push(geom)
   })
   
-  // Calculate bounds từ all geometries
-  let minLat = Infinity, minLng = Infinity
-  let maxLat = -Infinity, maxLng = -Infinity
-  let hasBounds = false
-
-  geometries.forEach(geom => {
-    const processCoords = (coords: number[] | number[][] | number[][][]) => {
-      if (Array.isArray(coords[0])) {
-        // Multi-dimensional array
-        (coords as number[][] | number[][][]).forEach(processCoords)
-      } else {
-        // Single coordinate [lng, lat]
-        const [lng, lat] = coords as number[]
-        if (typeof lng === 'number' && typeof lat === 'number') {
-          minLat = Math.min(minLat, lat)
-          minLng = Math.min(minLng, lng)
-          maxLat = Math.max(maxLat, lat)
-          maxLng = Math.max(maxLng, lng)
-          hasBounds = true
-        }
-      }
-    }
-    processCoords(geom.coordinates)
-  })
+  // Calculate bounds sử dụng function mới
+  const bounds = calculateBoundsFromGeometries(geometries)
 
   // Create layers
   const layers: Layer[] = Array.from(layerMap.entries()).map(([type, geoms]) => ({
@@ -176,7 +151,7 @@ export async function parseKMLFile(file: File): Promise<LayerGroup> {
     name: `${type} (${geoms.length})`,
     visible: true,
     geometry: geoms,
-    color: generateRandomColor(),
+    color: generateDefaultColor(),
     strokeWidth: 2
   }))
   
@@ -186,7 +161,7 @@ export async function parseKMLFile(file: File): Promise<LayerGroup> {
     fileName: fileName,
     layers: layers,
     visible: true,
-    bounds: hasBounds ? [[minLat, minLng], [maxLat, maxLng]] : undefined
+    bounds: bounds || undefined
   }
 }
 

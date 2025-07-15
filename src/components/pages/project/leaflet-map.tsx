@@ -1,15 +1,18 @@
-import React, { useMemo, useCallback, useEffect } from 'react'
+import React, { useMemo, useCallback, useEffect, useState, useRef } from 'react'
 import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet'
 import { LatLngBounds } from 'leaflet'
 import { useAtom, useSetAtom } from 'jotai'
-import { 
-  shouldFitBoundsAtom, 
-  clearFitBoundsAtom, 
+import { Box, Button, Tooltip } from '@mui/material'
+import { Layers } from '@mui/icons-material'
+import {
+  shouldFitBoundsAtom,
+  clearFitBoundsAtom,
   manualBoundsAtom,
   setSelectedLineStringAtom,
   selectedFeaturesForMapAtom
 } from '@/stores/importKMLAtoms'
 import type { LayerGroup, GeometryData, SelectedLineString, SelectedFeature } from '@/stores/importKMLAtoms'
+import { LayerStatsPanel } from './layer-stats-panel'
 import 'leaflet/dist/leaflet.css'
 
 // Component để handle map resize
@@ -45,15 +48,44 @@ const FitBoundsController = React.memo(() => {
     if (shouldFitBounds && manualBounds && map) {
       const timer = setTimeout(() => {
         try {
-          const latLngBounds = new LatLngBounds(manualBounds[0], manualBounds[1])
+          const [[minLat, minLng], [maxLat, maxLng]] = manualBounds
           
-          map.fitBounds(latLngBounds, { 
+          // Validate bounds
+          if (isNaN(minLat) || isNaN(minLng) || isNaN(maxLat) || isNaN(maxLng)) {
+            console.warn('[FitBoundsController] Invalid bounds detected:', manualBounds)
+            clearFitBounds()
+            return
+          }
+          
+          // Kiểm tra bounds có hợp lệ không
+          if (minLat >= maxLat || minLng >= maxLng) {
+            console.warn('[FitBoundsController] Invalid bounds range:', manualBounds)
+            clearFitBounds()
+            return
+          }
+          
+          // Kiểm tra bounds có quá nhỏ không
+          const latDiff = maxLat - minLat
+          const lngDiff = maxLng - minLng
+          if (latDiff < 0.0001 || lngDiff < 0.0001) {
+            console.warn('[FitBoundsController] Bounds too small:', manualBounds)
+            clearFitBounds()
+            return
+          }
+
+          const latLngBounds = new LatLngBounds(
+            [minLat, minLng], 
+            [maxLat, maxLng]
+          )
+
+          map.fitBounds(latLngBounds, {
             padding: [50, 50],
             maxZoom: 16,
             animate: true,
             duration: 1.5
           })
-          
+
+          console.log('[FitBoundsController] Successfully fitted bounds:', manualBounds)
           clearFitBounds()
         } catch (error) {
           console.error('[FitBoundsController] Error fitting bounds:', error)
@@ -66,6 +98,19 @@ const FitBoundsController = React.memo(() => {
       clearFitBounds()
     }
   }, [shouldFitBounds, manualBounds, map, clearFitBounds])
+
+  return null
+})
+
+// Component để expose map reference
+const MapRefController = React.memo(({ onMapReady }: { onMapReady: (map: L.Map) => void }) => {
+  const map = useMap()
+
+  useEffect(() => {
+    if (map) {
+      onMapReady(map)
+    }
+  }, [map, onMapReady])
 
   return null
 })
@@ -87,19 +132,19 @@ const convertToGeoJSON = (geometry: GeometryData[]): GeoJSON.FeatureCollection =
 }
 
 // Component render từng layer với memoization
-const LayerRenderer = React.memo(({ 
-  layer, 
+const LayerRenderer = React.memo(({
+  layer,
   groupVisible,
   groupId,
   groupName
-}: { 
+}: {
   layer: {
     id: string
     name: string
     visible: boolean
     color?: string
     geometry?: GeometryData[]
-  }, 
+  },
   groupVisible: boolean,
   groupId: string,
   groupName: string
@@ -107,7 +152,7 @@ const LayerRenderer = React.memo(({
   const setSelectedLineString = useSetAtom(setSelectedLineStringAtom)
   const [selectedFeatures] = useAtom(selectedFeaturesForMapAtom)
   const setSelectedFeatures = useSetAtom(selectedFeaturesForMapAtom)
-  
+
   const geoJsonData = useMemo(() => {
     if (!layer.visible || !groupVisible || !layer.geometry?.length) {
       return null
@@ -118,26 +163,27 @@ const LayerRenderer = React.memo(({
   const layerStyle = useCallback((feature?: GeoJSON.Feature) => {
     const featureId = feature?.id?.toString() || ''
     const isSelected = selectedFeatures.some(f => f.id === featureId)
-    const defaultColor = layer.color || '#3388ff' // Default Leaflet blue
-    
+    // Luôn sử dụng màu primary của MUI làm màu mặc định, bỏ qua layer.color
+    const defaultColor = '#1976d2' // MUI primary blue
+
     return {
-      color: isSelected ? '#ff6b35' : defaultColor,
+      color: isSelected ? '#d32f2f' : defaultColor, // Màu đỏ khi được chọn
       weight: isSelected ? 4 : 3,
       opacity: isSelected ? 1.0 : 0.9,
       fillOpacity: isSelected ? 0.6 : 0.4,
-      fillColor: isSelected ? '#ff6b35' : defaultColor,
+      fillColor: isSelected ? '#d32f2f' : defaultColor, // Màu đỏ khi được chọn
       dashArray: layer.name.includes('Line') ? '5, 5' : undefined
     }
-  }, [layer.color, layer.name, selectedFeatures])
+  }, [layer.name, selectedFeatures])
 
   const onEachFeature = useCallback((feature: GeoJSON.Feature, leafletLayer: L.Layer) => {
     // Handle click event cho feature selection
     leafletLayer.on('click', (e) => {
       const featureId = feature.id?.toString() || `${groupId}-${layer.id}-${Date.now()}`
-      
+
       // Check if feature is already selected
       const existingIndex = selectedFeatures.findIndex(f => f.id === featureId)
-      
+
       if (existingIndex >= 0) {
         // Deselect feature
         const newSelection = selectedFeatures.filter(f => f.id !== featureId)
@@ -157,11 +203,11 @@ const LayerRenderer = React.memo(({
           } as GeometryData,
           properties: feature.properties || {}
         }
-        
+
         const newSelection = [...selectedFeatures, selectedFeature]
         setSelectedFeatures(newSelection)
       }
-      
+
       // Prevent event bubbling
       e.originalEvent.stopPropagation()
     })
@@ -169,7 +215,7 @@ const LayerRenderer = React.memo(({
     // Thêm popup cho LineString
     if (feature.geometry?.type === 'LineString') {
       const featureId = feature.id?.toString() || `${groupId}-${layer.id}-${Date.now()}`
-      
+
       leafletLayer.bindPopup(() => {
         const popupDiv = document.createElement('div')
         popupDiv.innerHTML = `
@@ -213,7 +259,7 @@ const LayerRenderer = React.memo(({
             </button>
           </div>
         `
-        
+
         // Thêm event listener cho button sau khi popup được render
         setTimeout(() => {
           const button = document.getElementById(`assign-package-btn-${featureId}`)
@@ -231,13 +277,13 @@ const LayerRenderer = React.memo(({
                   properties: feature.properties || {}
                 }
               }
-              
+
               setSelectedLineString(selectedLineString)
               leafletLayer.closePopup()
             })
           }
         }, 50)
-        
+
         return popupDiv
       })
     }
@@ -257,19 +303,37 @@ const LayerRenderer = React.memo(({
 
 interface LeafletMapProps {
   layerGroups: LayerGroup[]
-  height?: string | number
 }
 
 // Component chính
-export const LeafletMap = ({ 
-  layerGroups, 
-  height = '100%'
+export const LeafletMap = ({
+  layerGroups,
 }: LeafletMapProps) => {
+  const [showLayerPanel, setShowLayerPanel] = useState(false)
+  const mapRef = useRef<L.Map | null>(null)
+
+  // Function để navigate đến layer
+  const handleNavigateToLayer = useCallback((bounds: [[number, number], [number, number]]) => {
+    if (mapRef.current) {
+      try {
+        const latLngBounds = new LatLngBounds(bounds[0], bounds[1])
+        mapRef.current.fitBounds(latLngBounds, {
+          padding: [50, 50],
+          maxZoom: 16,
+          animate: true,
+          duration: 1.5
+        })
+      } catch (error) {
+        console.error('[LeafletMap] Error navigating to layer:', error)
+      }
+    }
+  }, [])
+
   // Render visible layers với memoization
   const visibleLayers = useMemo(() => {
     return layerGroups
       .filter(group => group.visible)
-      .flatMap(group => 
+      .flatMap(group =>
         group.layers.map(layer => (
           <LayerRenderer
             key={layer.id}
@@ -283,7 +347,7 @@ export const LeafletMap = ({
   }, [layerGroups])
 
   return (
-    <div style={{ height, width: '100%' }}>
+    <div className='h-screen w-full relative'>
       <MapContainer
         center={[21.0285, 105.8542]} // Hà Nội mặc định
         zoom={10}
@@ -302,16 +366,69 @@ export const LeafletMap = ({
           subdomains="abcd"
           maxZoom={20}
         />
-        
+
         {/* Map resize handler */}
         <MapResizeHandler />
-        
+
         {/* Controller để tự động fit bounds */}
         <FitBoundsController />
-        
+
+        {/* Controller để expose map reference */}
+        <MapRefController onMapReady={(map) => { mapRef.current = map }} />
+
         {/* Render các layers */}
         {visibleLayers}
       </MapContainer>
+
+      {/* Button để mở Layer Stats Panel */}
+      {!showLayerPanel && (
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 16,
+            right: 16,
+            zIndex: 1000,
+            animation: 'slideInFromRight 0.3s ease-out'
+          }}
+        >
+          <Tooltip title="Hiển thị thống kê layers">
+            <Button
+              onClick={() => setShowLayerPanel(true)}
+              variant="contained"
+              size="small"
+              startIcon={<Layers />}
+              sx={{
+                borderRadius: 2,
+                boxShadow: 3,
+                bgcolor: 'primary.main',
+                color: 'white',
+                textTransform: 'none',
+                fontWeight: 600,
+                px: 2,
+                '&:hover': {
+                  bgcolor: 'primary.dark',
+                  boxShadow: 4,
+                  transform: 'scale(1.05)'
+                },
+                transition: 'all 0.2s ease-in-out'
+              }}
+            >
+              Chi tiết ({layerGroups.length})
+            </Button>
+          </Tooltip>
+        </Box>
+      )}
+
+      {/* Layer Stats Panel */}
+      <LayerStatsPanel
+        open={showLayerPanel}
+        onClose={() => setShowLayerPanel(false)}
+        onRefresh={() => {
+          // Có thể thêm logic refresh ở đây nếu cần
+          console.log('Refreshing layer stats...')
+        }}
+        onNavigateToLayer={handleNavigateToLayer}
+      />
     </div>
   )
 } 

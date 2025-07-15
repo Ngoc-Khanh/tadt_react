@@ -1,11 +1,7 @@
 import { Box, Typography } from "@mui/material";
 import { UploadArea } from "./upload-area";
 
-interface ProjectImportingProps {
-  projectId?: string
-}
-
-export function ProjectImporting({ projectId }: ProjectImportingProps) {
+export function ProjectImporting() {
   return (
     <Box className="h-full p-6">
       <Box className="h-full flex gap-3">
@@ -22,7 +18,7 @@ export function ProjectImporting({ projectId }: ProjectImportingProps) {
             </Box>
 
             {/* Upload Area */}
-            <UploadArea projectId={projectId} />
+            <UploadArea />
           </Box>
         </Box>
       </Box>

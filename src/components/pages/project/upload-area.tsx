@@ -1,15 +1,19 @@
-import { CloudUpload, CheckCircle, Error as ErrorIcon } from "@mui/icons-material"
+import {
+  CloudUpload,
+  Description,
+  Clear,
+  Delete,
+  Check,
+  Error as ErrorIcon
+} from "@mui/icons-material"
 import {
   Box,
   Paper,
   Typography,
-  CircularProgress,
-  Alert,
   LinearProgress,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText
+  Button,
+  Chip,
+  IconButton
 } from "@mui/material"
 import { useCallback, useRef, useState, type ChangeEvent, type DragEvent } from "react"
 import { useSetAtom, useAtom } from "jotai"
@@ -17,22 +21,28 @@ import {
   addLayerGroupAtom,
   addSuccessfulFileAtom,
   layerGroupsAtom,
-  setShouldFitBoundsAtom
+  setShouldFitBoundsAtom,
+  clearAllDataAtom
 } from "@/stores/importKMLAtoms"
 import { parseKMLFile, validateKMLFile } from "@/lib/kml-parser"
+import { calculateBoundsWithPadding } from "@/lib/get-lat-lags-from-geom"
 import { LeafletMap } from "./leaflet-map"
 
-interface FileProcessResult {
+interface UploadFile {
+  id: string
   file: File
-  status: 'processing' | 'success' | 'error'
+  name: string
+  size: number
+  status: 'pending' | 'processing' | 'success' | 'error'
+  progress: number
   error?: string
   layerGroupId?: string
 }
 
 export function UploadArea() {
   const [dragActive, setDragActive] = useState<boolean>(false)
-  const [isProcessing, setIsProcessing] = useState<boolean>(false)
-  const [fileResults, setFileResults] = useState<FileProcessResult[]>([])
+  const [files, setFiles] = useState<UploadFile[]>([])
+  const [showMap, setShowMap] = useState<boolean>(false)
   const dragCounter = useRef<number>(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -41,6 +51,7 @@ export function UploadArea() {
   const addSuccessfulFile = useSetAtom(addSuccessfulFileAtom)
   const [layerGroups] = useAtom(layerGroupsAtom)
   const setShouldFitBounds = useSetAtom(setShouldFitBoundsAtom)
+  const clearAllData = useSetAtom(clearAllDataAtom)
 
   const handleDragEnter = useCallback((e: DragEvent) => {
     e.preventDefault()
@@ -87,82 +98,194 @@ export function UploadArea() {
     }
   }, [])
 
-  const handleFiles = useCallback(async (files: File[]) => {
-    setIsProcessing(true)
-    setFileResults([])
-
-    const initialResults: FileProcessResult[] = files.map(file => ({
+  // Thêm file vào danh sách (chưa xử lý)
+  const handleFiles = useCallback((newFiles: File[]) => {
+    const mapped: UploadFile[] = newFiles.map((file, idx) => ({
+      id: `${file.name}-${file.size}-${Date.now()}-${idx}`,
       file,
-      status: 'processing'
+      name: file.name,
+      size: file.size,
+      status: 'pending',
+      progress: 0,
     }))
-    setFileResults(initialResults)
+    setFiles(prev => [...prev, ...mapped])
+  }, [])
 
-    // Process từng file
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i]
+  // Xóa 1 file
+  const removeFile = useCallback((id: string) => {
+    setFiles(prev => prev.filter(f => f.id !== id))
+  }, [])
+
+  // Xóa tất cả
+  const clearAllFiles = useCallback(() => {
+    setFiles([])
+  }, [])
+
+  // Format size
+  const formatFileSize = useCallback((size: number) => {
+    return `${(size / 1024 / 1024).toFixed(2)} MB`
+  }, [])
+
+  // Xử lý import khi bấm nút
+  const handleImport = useCallback(async () => {
+    // Lấy tất cả file pending và success để xử lý lại
+    const filesToProcess = files.filter(f => f.status === 'pending' || f.status === 'success')
+    if (filesToProcess.length === 0) return
+
+    // Xóa tất cả dữ liệu cũ nếu có file success để xử lý lại
+    const hasSuccessFiles = files.some(f => f.status === 'success')
+    if (hasSuccessFiles) {
+      clearAllData()
+    }
+
+    // Cập nhật trạng thái processing cho tất cả file cần xử lý
+    setFiles(prev =>
+      prev.map(f =>
+        (f.status === 'pending' || f.status === 'success')
+          ? { ...f, status: 'processing', progress: 0, error: undefined }
+          : f
+      )
+    )
+
+    // Xử lý từng file
+    for (let i = 0; i < filesToProcess.length; i++) {
+      const file = filesToProcess[i]
 
       try {
         // Validate file
-        const validation = validateKMLFile(file)
+        const validation = validateKMLFile(file.file)
         if (!validation.isValid) {
-          throw new Error(validation.error)
+          throw new Error(validation.error || 'File không hợp lệ')
         }
 
         // Parse file
-        const layerGroup = await parseKMLFile(file)
+        const layerGroup = await parseKMLFile(file.file)
 
         // Add to store
         addLayerGroup(layerGroup)
         addSuccessfulFile({
-          id: `file-${Date.now()}-${i}`,
+          id: file.id,
           name: file.name,
           size: file.size,
           layerGroupId: layerGroup.id
         })
 
-        // Auto fit bounds cho layer mới
+        // Auto fit bounds cho layer mới với padding phù hợp
         if (layerGroup.bounds) {
-          setShouldFitBounds(layerGroup.bounds)
+          const paddedBounds = calculateBoundsWithPadding(layerGroup.bounds, 0.1)
+          setShouldFitBounds(paddedBounds)
         }
 
-        // Update result
-        setFileResults(prev => prev.map((result, index) =>
-          index === i
-            ? { ...result, status: 'success', layerGroupId: layerGroup.id }
-            : result
-        ))
+        // Update progress thành công
+        setFiles(prev =>
+          prev.map(f =>
+            f.id === file.id
+              ? { ...f, status: 'success', progress: 100, layerGroupId: layerGroup.id }
+              : f
+          )
+        )
 
       } catch (error) {
         console.error(`[UploadArea] Error processing file ${file.name}:`, error)
 
-        // Update result with error
-        setFileResults(prev => prev.map((result, index) =>
-          index === i
-            ? {
-              ...result,
-              status: 'error',
-              error: error instanceof Error ? error.message : 'Lỗi không xác định'
-            }
-            : result
-        ))
+        // Update progress lỗi
+        setFiles(prev =>
+          prev.map(f =>
+            f.id === file.id
+              ? {
+                ...f,
+                status: 'error',
+                progress: 100,
+                error: error instanceof Error ? error.message : String(error)
+              }
+              : f
+          )
+        )
       }
     }
 
-    setIsProcessing(false)
-  }, [addLayerGroup, addSuccessfulFile, setShouldFitBounds])
+    // Hiển thị bản đồ sau khi xử lý xong
+    setShowMap(true)
+  }, [files, addLayerGroup, addSuccessfulFile, setShouldFitBounds, clearAllData])
 
   const onButtonClick = useCallback(() => {
-    if (!isProcessing) {
-      fileInputRef.current?.click()
-    }
-  }, [isProcessing])
+    fileInputRef.current?.click()
+  }, [])
 
-  const hasResults = fileResults.length > 0
-  const successCount = fileResults.filter(r => r.status === 'success').length
-  const errorCount = fileResults.filter(r => r.status === 'error').length
+  // Nếu đang hiển thị bản đồ
+  if (showMap) {
+    return (
+      <Box sx={{ width: '100%', height: '100%' }}>
+        <Paper 
+          elevation={2}
+          sx={{ 
+            mt: 2,
+            height: 'calc(100vh - 200px)', // Chiều cao cố định tránh overflow
+            minHeight: '600px',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden'
+          }}
+        >
+          {/* Header */}
+          <Box 
+            sx={{ 
+              p: 3, 
+              borderBottom: 1, 
+              borderColor: 'divider', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'space-between',
+              flexShrink: 0,
+              bgcolor: 'background.paper'
+            }}
+          >
+            <Box>
+              <Typography variant="h5" color="primary" fontWeight="bold">
+                Preview Bản đồ
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                {layerGroups.length} layer đã được tải lên thành công
+              </Typography>
+            </Box>
+            <Button
+              variant="outlined"
+              color="primary"
+              startIcon={<CloudUpload />}
+              onClick={() => setShowMap(false)}
+              sx={{ 
+                ml: 2,
+                minWidth: '140px',
+                borderRadius: 2
+              }}
+            >
+              Quay lại Upload
+            </Button>
+          </Box>
+          
+          {/* Map Container */}
+          <Box 
+            sx={{ 
+              flexGrow: 1,
+              position: 'relative',
+              overflow: 'hidden',
+              '& .leaflet-container': {
+                height: '100%',
+                width: '100%',
+                zIndex: 1
+              }
+            }}
+          >
+            <LeafletMap layerGroups={layerGroups} />
+          </Box>
+        </Paper>
+      </Box>
+    )
+  }
 
   return (
     <Box>
+      {/* Upload Area */}
       <Paper
         variant="outlined"
         sx={{
@@ -171,10 +294,9 @@ export function UploadArea() {
           bgcolor: dragActive ? 'primary.50' : 'transparent',
           p: 6,
           textAlign: 'center',
-          cursor: isProcessing ? 'wait' : 'pointer',
+          cursor: 'pointer',
           transition: 'all 0.2s ease',
           mb: 3,
-          opacity: isProcessing ? 0.8 : 1,
           '&:hover': {
             borderColor: 'primary.main',
             bgcolor: 'primary.50'
@@ -193,123 +315,118 @@ export function UploadArea() {
           accept=".kml,.kmz"
           onChange={handleChange}
           style={{ display: 'none' }}
-          disabled={isProcessing}
         />
 
-        {isProcessing ? (
-          <Box display="flex" flexDirection="column" alignItems="center">
-            <CircularProgress size={64} sx={{ mb: 2 }} />
-            <Typography variant="h6" gutterBottom>
-              Đang xử lý file...
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Vui lòng đợi trong giây lát
-            </Typography>
-          </Box>
-        ) : (
-          <>
-            <CloudUpload
-              sx={{
-                fontSize: 64,
-                color: dragActive ? 'primary.main' : 'grey.400',
-                mb: 2
-              }}
-            />
-            <Typography variant="h6" gutterBottom>
-              {dragActive ? 'Thả file vào đây' : 'Kéo thả file vào đây'}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Chấp nhận file .kml và .kmz (tối đa 50MB)
-            </Typography>
-          </>
-        )}
+        <CloudUpload
+          sx={{
+            fontSize: 64,
+            color: dragActive ? 'primary.main' : 'grey.400',
+            mb: 2
+          }}
+        />
+        <Typography variant="h6" gutterBottom>
+          {dragActive ? 'Thả file vào đây' : 'Kéo thả file vào đây'}
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          Chấp nhận file .kml và .kmz (tối đa 50MB)
+        </Typography>
       </Paper>
 
-      {/* Progress & Results */}
-      {hasResults && (
+      {/* File List */}
+      {files.length > 0 && (
         <Paper sx={{ p: 3 }}>
-          {isProcessing && (
-            <Box sx={{ mb: 3 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                <Typography variant="subtitle2" sx={{ flexGrow: 1 }}>
-                  Tiến độ xử lý
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {fileResults.filter(r => r.status !== 'processing').length} / {fileResults.length}
-                </Typography>
-              </Box>
-              <LinearProgress
-                variant="determinate"
-                value={(fileResults.filter(r => r.status !== 'processing').length / fileResults.length) * 100}
-                sx={{ height: 8, borderRadius: 4 }}
-              />
+          <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+              <Typography variant="h6">
+                Files đã tải ({files.length})
+              </Typography>
+              <Button
+                size="small"
+                onClick={clearAllFiles}
+                startIcon={<Clear />}
+              >
+                Xóa tất cả
+              </Button>
             </Box>
-          )}
 
-          {/* Summary */}
-          {!isProcessing && (
-            <Box sx={{ mb: 2 }}>
-              {successCount > 0 && (
-                <Alert severity="success" sx={{ mb: 1 }}>
-                  Đã xử lý thành công {successCount} file. Xem preview bản đồ bên dưới.
-                </Alert>
-              )}
-              {errorCount > 0 && (
-                <Alert severity="error">
-                  {errorCount} file gặp lỗi khi xử lý
-                </Alert>
-              )}
+            <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
+              {files.map((file) => (
+                <Paper key={file.id} variant="outlined" sx={{ p: 2, mb: 2 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <Description
+                      color={file.status === 'success' ? 'success' :
+                        file.status === 'error' ? 'error' : 'action'}
+                    />
+
+                    <Box sx={{ flexGrow: 1 }}>
+                      <Typography variant="subtitle2" noWrap>
+                        {file.name}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {formatFileSize(file.size)}
+                      </Typography>
+
+                      {file.status === 'pending' && (
+                        <Box sx={{ mt: 1 }}>
+                          <LinearProgress
+                            variant="determinate"
+                            value={file.progress}
+                            sx={{ height: 6, borderRadius: 3 }}
+                          />
+                          <Typography variant="caption" color="text.secondary">
+                            {file.progress}%
+                          </Typography>
+                        </Box>
+                      )}
+
+                      {file.status === 'processing' && (
+                        <Box sx={{ mt: 1 }}>
+                          <LinearProgress
+                            variant="indeterminate"
+                            sx={{ height: 6, borderRadius: 3 }}
+                          />
+                          <Typography variant="caption" color="text.secondary">
+                            Đang xử lý...
+                          </Typography>
+                        </Box>
+                      )}
+
+                      {file.status === 'error' && (
+                        <Typography variant="caption" color="error" sx={{ mt: 1, display: 'block' }}>
+                          {file.error}
+                        </Typography>
+                      )}
+                    </Box>
+
+                    {file.status === 'success' && (
+                      <Chip icon={<Check />} label="OK" color="success" size="small" />
+                    )}
+
+                    {file.status === 'error' && (
+                      <Chip icon={<ErrorIcon />} label="Lỗi" color="error" size="small" />
+                    )}
+
+                    <IconButton
+                      size="small"
+                      onClick={() => removeFile(file.id)}
+                    >
+                      <Delete />
+                    </IconButton>
+                  </Box>
+                </Paper>
+              ))}
             </Box>
-          )}
 
-          {/* File List */}
-          <List dense>
-            {fileResults.map((result, index) => (
-              <ListItem key={index}>
-                <ListItemIcon>
-                  {result.status === 'processing' && (
-                    <CircularProgress size={20} />
-                  )}
-                  {result.status === 'success' && (
-                    <CheckCircle color="success" />
-                  )}
-                  {result.status === 'error' && (
-                    <ErrorIcon color="error" />
-                  )}
-                </ListItemIcon>
-                <ListItemText
-                  primary={result.file.name}
-                  secondary={
-                    result.status === 'error'
-                      ? result.error
-                      : `${(result.file.size / 1024 / 1024).toFixed(2)} MB`
-                  }
-                  secondaryTypographyProps={{
-                    color: result.status === 'error' ? 'error' : 'text.secondary'
-                  }}
-                />
-              </ListItem>
-            ))}
-          </List>
-        </Paper>
-      )}
-
-      {/* Map Preview */}
-      {layerGroups.length > 0 && (
-        <Paper sx={{ mt: 3 }}>
-          <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
-            <Typography variant="h6" color="primary">
-              Preview Bản đồ
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Dữ liệu KML/KMZ đã được tải lên
-            </Typography>
-          </Box>
-          <Box sx={{ height: 400 }}>
-            <LeafletMap
-              layerGroups={layerGroups}
-              height="100%"
-            />
+            {/* Import Button */}
+            <Button
+              variant="contained"
+              color="primary"
+              disabled={files.length === 0 || files.some(f => f.status === 'processing')}
+              onClick={handleImport}
+              sx={{ mt: 2 }}
+            >
+              Import
+            </Button>
           </Box>
         </Paper>
       )}
