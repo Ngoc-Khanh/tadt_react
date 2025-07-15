@@ -1,15 +1,15 @@
 import { useMockMapData } from '@/hooks';
-import { getPackageStatusColor } from '@/lib/package-status-colors';
 import { Box } from '@mui/material';
 import { Map as LeafletMapType } from 'leaflet';
-import { useEffect, useRef, useState } from 'react';
-import { MapContainer, Polygon, Polyline, TileLayer } from 'react-leaflet';
+import React, { useEffect, useRef, useState } from 'react';
+import { MapContainer, TileLayer } from 'react-leaflet';
 import { LayerButton } from './layer-button';
 import { LayerPopper } from './layer-popper';
+import { MapLayers } from './map-layers';
 import { ProjectError } from './project-error';
 import { ProjectLoading } from './project-loading';
 
-export function ProjectLeafletMap({ projectId }: { projectId: string }) {
+export function ProjectMainMap({ projectId }: { projectId: string }) {
   const { data, isLoading, error } = useMockMapData(projectId)
   const mapRef = useRef<LeafletMapType | null>(null)
 
@@ -18,6 +18,9 @@ export function ProjectLeafletMap({ projectId }: { projectId: string }) {
   const [visiblePackages, setVisiblePackages] = useState<Set<string>>(new Set())
   const [visibleZones, setVisibleZones] = useState<Set<string>>(new Set())
   const open = Boolean(anchorEl)
+
+  const [selectedZone, setSelectedZone] = useState<string | null>(null)
+  const [selectedPackage, setSelectedPackage] = useState<string | null>(null)
 
   // Initialize visibility when data loads
   useEffect(() => {
@@ -72,61 +75,16 @@ export function ProjectLeafletMap({ projectId }: { projectId: string }) {
           maxZoom={20}
         />
 
-        {/* Render geometry của vùng */}
-        {data?.map((zone) => {
-          // Chỉ render nếu zone được hiển thị
-          if (!visibleZones.has(zone.zone_id)) return null
-
-          return zone.geometry?.map((geom, idx) => {
-            if (geom.type === "LineString") {
-              return (
-                <Polyline
-                  key={`zone-${zone.zone_id}-geom-${idx}`}
-                  positions={geom.coordinates.map(([lng, lat]) => [lat, lng])}
-                  pathOptions={{ color: "#0EA5E9", weight: 4 }}
-                />
-              );
-            } else if (geom.type === "Polygon") {
-              return (
-                <Polygon
-                  key={`zone-${zone.zone_id}-geom-${idx}`}
-                  positions={geom.coordinates.map(([lng, lat]) => [lat, lng])}
-                  pathOptions={{ color: "#0EA5E9", weight: 4 }}
-                />
-              );
-            }
-            return null;
-          })
-        })}
-        {/* Render geometry của các package */}
-        {data?.map((zone) =>
-          zone.packages?.flatMap(pkg => {
-            // Chỉ render nếu package được hiển thị
-            if (!visiblePackages.has(pkg.package_id)) return []
-
-            const statusColor = getPackageStatusColor(pkg.trang_thai, pkg.tien_do_thuc_te);
-            return pkg.geometry?.map((geom, idx) => {
-              if (geom.type === "LineString") {
-                return (
-                  <Polyline
-                    key={`pkg-${pkg.package_id}-geom-${idx}`}
-                    positions={geom.coordinates.map(([lng, lat]) => [lat, lng])}
-                    pathOptions={{ color: statusColor.color, weight: 4 }}
-                  />
-                );
-              } else if (geom.type === "Polygon") {
-                return (
-                  <Polygon
-                    key={`pkg-${pkg.package_id}-geom-${idx}`}
-                    positions={geom.coordinates.map(([lng, lat]) => [lat, lng])}
-                    pathOptions={{ color: statusColor.color, weight: 4 }}
-                  />
-                );
-              }
-              return null;
-            }) || []
-          }) || []
-        )}
+        <MapLayers
+          data={data!}
+          visibleZones={visibleZones}
+          visiblePackages={visiblePackages}
+          selectedZone={selectedZone}
+          selectedPackage={selectedPackage}
+          onZoneClick={setSelectedZone}
+          onPackageClick={setSelectedPackage}
+          onViewDetails={setSelectedPackage}
+        />
       </MapContainer>
     </Box>
   )

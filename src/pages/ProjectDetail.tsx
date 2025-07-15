@@ -1,4 +1,4 @@
-import { ProjectError, ProjectImporting, ProjectLeafletMap, ProjectLoading } from "@/components/pages/project";
+import { ProjectError, ProjectImporting, ProjectMainMap, ProjectLoading } from "@/components/pages/project";
 import { routes } from "@/config";
 import { useProjectDetail } from "@/hooks";
 import { KeyboardArrowLeft, Layers, Map } from "@mui/icons-material";
@@ -88,7 +88,7 @@ export default function ProjectDetailPage() {
           }}
         >
           <Box sx={{ position: 'relative', height: '100%' }}>
-            <ProjectLeafletMap projectId={projectId!} />
+            <ProjectMainMap projectId={projectId!} />
           </Box>
         </Paper>
       </Box>
