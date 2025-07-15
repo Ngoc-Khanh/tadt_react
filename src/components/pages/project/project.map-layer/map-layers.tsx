@@ -15,16 +15,7 @@ interface MapLayersProps {
   onViewDetails: (packageId: string) => void;
 }
 
-export const MapLayers: React.FC<MapLayersProps> = React.memo(({
-  data,
-  visibleZones,
-  visiblePackages,
-  selectedZone,
-  selectedPackage,
-  onZoneClick,
-  onPackageClick,
-  onViewDetails
-}) => {
+export const MapLayers: React.FC<MapLayersProps> = React.memo(({ data, visibleZones, visiblePackages, selectedZone, selectedPackage, onZoneClick, onPackageClick, onViewDetails }) => {
   return (
     <>
       {/* Render geometry của vùng */}

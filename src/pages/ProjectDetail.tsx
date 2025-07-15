@@ -1,4 +1,4 @@
-import { ProjectError, ProjectImporting, ProjectMainMap, ProjectLoading } from "@/components/pages/project";
+import { ProjectError, ProjectImporting, ProjectLoading, ProjectMainMap } from "@/components/pages/project";
 import { routes } from "@/config";
 import { useProjectDetail } from "@/hooks";
 import { KeyboardArrowLeft, Layers, Map } from "@mui/icons-material";

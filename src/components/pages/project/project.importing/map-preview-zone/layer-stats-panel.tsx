@@ -247,13 +247,14 @@ export const LayerStatsPanel: React.FC<LayerStatsPanelProps> = React.memo(({
 
         <CardContent sx={{ 
           flex: 1, 
-          overflow: 'hidden',
+          overflow: 'auto',
           p: 0,
+          he
           display: 'flex',
           flexDirection: 'column',
           '&:last-child': { pb: 0 }
         }}>
-          <Box sx={{ p: 2, flex: 1, overflow: 'auto', minHeight: 0 }}>
+          <Box sx={{ p: 2, flex: 1 }}>
             {/* Nội dung giống như version overlay nhưng đã được render ở trên */}
             {isLoading && (
               <Box display="flex" justifyContent="center" py={2}>
@@ -645,129 +646,134 @@ export const LayerStatsPanel: React.FC<LayerStatsPanelProps> = React.memo(({
                     <Typography variant="subtitle2" sx={{ mb: 2, color: 'text.secondary' }}>
                       Danh sách layer groups:
                     </Typography>
-                    <List dense sx={{ 
-                      flex: 1,
-                      overflow: 'auto',
-                      pr: 1,
-                      '&::-webkit-scrollbar': {
-                        width: 6
-                      },
-                      '&::-webkit-scrollbar-track': {
-                        backgroundColor: 'grey.100',
-                        borderRadius: 3
-                      },
-                      '&::-webkit-scrollbar-thumb': {
-                        backgroundColor: 'grey.400',
-                        borderRadius: 3,
-                        '&:hover': {
-                          backgroundColor: 'grey.600'
+                    <Box
+                      sx={{
+                        maxHeight: 320, // hoặc điều chỉnh cho phù hợp UI
+                        overflow: 'auto',
+                        pr: 1,
+                        mb: 2,
+                        '&::-webkit-scrollbar': {
+                          width: 6
+                        },
+                        '&::-webkit-scrollbar-track': {
+                          backgroundColor: 'grey.100',
+                          borderRadius: 3
+                        },
+                        '&::-webkit-scrollbar-thumb': {
+                          backgroundColor: 'grey.400',
+                          borderRadius: 3,
+                          '&:hover': {
+                            backgroundColor: 'grey.600'
+                          }
                         }
-                      }
-                    }}>
-                      {layerGroups.map((group) => (
-                        <Box key={group.id} sx={{ mb: 2 }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-                            <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-                              {group.name} ({group.layers.length} layers)
-                            </Typography>
-                            <IconButton
-                              size="small"
-                              onClick={() => toggleGroupVisibility(group.id)}
-                              sx={{ p: 0.5 }}
-                            >
-                              {group.visible ? (
-                                <Visibility fontSize="small" color="action" />
-                              ) : (
-                                <VisibilityOff fontSize="small" color="action" />
-                              )}
-                            </IconButton>
-                          </Box>
-                          {group.layers.map((layer) => {
-                            const layerFeatures = layer.geometry?.length || 0
-                            const isSelected = selectedFeatures.some(f => f.layerId === layer.id)
-                            
-                            return (
-                              <ListItemButton
-                                key={layer.id}
-                                sx={{
-                                  px: 1,
-                                  py: 0.5,
-                                  mb: 0.5,
-                                  borderRadius: 1,
-                                  border: isSelected ? '2px solid' : '1px solid transparent',
-                                  borderColor: isSelected ? 'primary.main' : 'transparent',
-                                  backgroundColor: isSelected ? 'primary.50' : 'transparent',
-                                  '&:hover': {
-                                    backgroundColor: isSelected ? 'primary.100' : 'grey.50'
-                                  }
-                                }}
-                                onClick={() => handleLayerClick(layer, group)}
+                      }}
+                    >
+                      <List dense>
+                        {layerGroups.map((group) => (
+                          <Box key={group.id} sx={{ mb: 2 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                              <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                                {group.name} ({group.layers.length} layers)
+                              </Typography>
+                              <IconButton
+                                size="small"
+                                onClick={() => toggleGroupVisibility(group.id)}
+                                sx={{ p: 0.5 }}
                               >
-                                <ListItemIcon sx={{ minWidth: 32 }}>
-                                  <Assignment 
-                                    color={isSelected ? 'primary' : 'action'} 
-                                    fontSize="small" 
-                                  />
-                                </ListItemIcon>
-                                <Box sx={{ flex: 1 }}>
-                                  <Typography variant="body2" fontWeight={isSelected ? 'bold' : 'normal'}>
-                                    {formatLayerName(layer.name)}
-                                  </Typography>
-                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5, flexWrap: 'wrap' }}>
-                                    <Chip
-                                      label={`${layerFeatures} features`}
-                                      size="small"
-                                      color="info"
-                                      variant="filled"
+                                {group.visible ? (
+                                  <Visibility fontSize="small" color="action" />
+                                ) : (
+                                  <VisibilityOff fontSize="small" color="action" />
+                                )}
+                              </IconButton>
+                            </Box>
+                            {group.layers.map((layer) => {
+                              const layerFeatures = layer.geometry?.length || 0
+                              const isSelected = selectedFeatures.some(f => f.layerId === layer.id)
+                              
+                              return (
+                                <ListItemButton
+                                  key={layer.id}
+                                  sx={{
+                                    px: 1,
+                                    py: 0.5,
+                                    mb: 0.5,
+                                    borderRadius: 1,
+                                    border: isSelected ? '2px solid' : '1px solid transparent',
+                                    borderColor: isSelected ? 'primary.main' : 'transparent',
+                                    backgroundColor: isSelected ? 'primary.50' : 'transparent',
+                                    '&:hover': {
+                                      backgroundColor: isSelected ? 'primary.100' : 'grey.50'
+                                    }
+                                  }}
+                                  onClick={() => handleLayerClick(layer, group)}
+                                >
+                                  <ListItemIcon sx={{ minWidth: 32 }}>
+                                    <Assignment 
+                                      color={isSelected ? 'primary' : 'action'} 
+                                      fontSize="small" 
                                     />
-                                    <Box sx={{ display: 'flex', gap: 0.5 }}>
-                                      <IconButton
+                                  </ListItemIcon>
+                                  <Box sx={{ flex: 1 }}>
+                                    <Typography variant="body2" fontWeight={isSelected ? 'bold' : 'normal'}>
+                                      {formatLayerName(layer.name)}
+                                    </Typography>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5, flexWrap: 'wrap' }}>
+                                      <Chip
+                                        label={`${layerFeatures} features`}
                                         size="small"
-                                        onClick={(e) => {
-                                          e.stopPropagation()
-                                          toggleLayerVisibility({ groupId: group.id, layerId: layer.id })
-                                        }}
-                                        sx={{ p: 0.5 }}
-                                      >
-                                        {layer.visible ? (
-                                          <Visibility fontSize="small" color="action" />
-                                        ) : (
-                                          <VisibilityOff fontSize="small" color="action" />
-                                        )}
-                                      </IconButton>
-                                      <IconButton
-                                        size="small"
-                                        onClick={(e) => {
-                                          e.stopPropagation()
-                                          handleNavigateToLayer(layer)
-                                        }}
-                                        sx={{ p: 0.5 }}
-                                        title="Di chuyển đến vị trí layer"
-                                      >
-                                        <LocationOn fontSize="small" color="primary" />
-                                      </IconButton>
-                                      <IconButton
-                                        size="small"
-                                        onClick={(e) => {
-                                          e.stopPropagation()
-                                          if (window.confirm(`Bạn có chắc chắn muốn xóa layer "${layer.name}"?`)) {
-                                            removeLayer({ groupId: group.id, layerId: layer.id })
-                                          }
-                                        }}
-                                        sx={{ p: 0.5 }}
-                                        title="Xóa layer"
-                                      >
-                                        <Delete fontSize="small" color="error" />
-                                      </IconButton>
+                                        color="info"
+                                        variant="filled"
+                                      />
+                                      <Box sx={{ display: 'flex', gap: 0.5 }}>
+                                        <IconButton
+                                          size="small"
+                                          onClick={(e) => {
+                                            e.stopPropagation()
+                                            toggleLayerVisibility({ groupId: group.id, layerId: layer.id })
+                                          }}
+                                          sx={{ p: 0.5 }}
+                                        >
+                                          {layer.visible ? (
+                                            <Visibility fontSize="small" color="action" />
+                                          ) : (
+                                            <VisibilityOff fontSize="small" color="action" />
+                                          )}
+                                        </IconButton>
+                                        <IconButton
+                                          size="small"
+                                          onClick={(e) => {
+                                            e.stopPropagation()
+                                            handleNavigateToLayer(layer)
+                                          }}
+                                          sx={{ p: 0.5 }}
+                                          title="Di chuyển đến vị trí layer"
+                                        >
+                                          <LocationOn fontSize="small" color="primary" />
+                                        </IconButton>
+                                        <IconButton
+                                          size="small"
+                                          onClick={(e) => {
+                                            e.stopPropagation()
+                                            if (window.confirm(`Bạn có chắc chắn muốn xóa layer "${layer.name}"?`)) {
+                                              removeLayer({ groupId: group.id, layerId: layer.id })
+                                            }
+                                          }}
+                                          sx={{ p: 0.5 }}
+                                          title="Xóa layer"
+                                        >
+                                          <Delete fontSize="small" color="error" />
+                                        </IconButton>
+                                      </Box>
                                     </Box>
                                   </Box>
-                                </Box>
-                              </ListItemButton>
-                            )
-                          })}
-                        </Box>
-                      ))}
-                    </List>
+                                </ListItemButton>
+                              )
+                            })}
+                          </Box>
+                        ))}
+                      </List>
+                    </Box>
                   </>
                 )}
 

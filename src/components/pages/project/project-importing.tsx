@@ -1,5 +1,5 @@
+import { UploadArea } from "@/components/pages/project/project.importing";
 import { Box, Typography } from "@mui/material";
-import { UploadArea } from "./upload-area";
 
 export function ProjectImporting() {
   return (

@@ -1,3 +1,4 @@
+import { LayerButton, LayerPopper, ProjectError, ProjectLoading } from '@/components/pages/project/project.main-map';
 import { MapLayers } from '@/components/pages/project/project.map-layer';
 import { PackageDetailPanel } from '@/components/pages/project/project.package-panel';
 import { useMockMapData } from '@/hooks';
@@ -7,10 +8,6 @@ import { useAtom } from 'jotai';
 import { Map as LeafletMapType } from 'leaflet';
 import React, { useEffect, useRef, useState } from 'react';
 import { MapContainer, TileLayer } from 'react-leaflet';
-import { LayerButton } from './layer-button';
-import { LayerPopper } from './layer-popper';
-import { ProjectError } from './project-error';
-import { ProjectLoading } from './project-loading';
 
 export function ProjectMainMap({ projectId }: { projectId: string }) {
   const { data, isLoading, error } = useMockMapData(projectId)
@@ -28,21 +25,17 @@ export function ProjectMainMap({ projectId }: { projectId: string }) {
   const [sidePanelOpen, setSidePanelOpen] = useAtom(sidePanelOpenAtom)
   const [selectedPackageId, setSelectedPackageId] = useAtom(selectedPackageIdForPanelAtom)
 
-  // Handle view details - open side panel
   const handleViewDetails = (packageId: string) => {
     setSelectedPackageId(packageId)
     setSidePanelOpen(true)
-    // Đóng popup nếu đang mở
     setSelectedPackage(null)
   }
 
-  // Handle close panel
   const handleClosePanel = () => {
     setSidePanelOpen(false)
     setSelectedPackageId(null)
   }
 
-  // Initialize visibility when data loads
   useEffect(() => {
     if (data) {
       setVisiblePackages(new Set(data.flatMap(zone => zone.packages?.map(pkg => pkg.package_id) || [])))
