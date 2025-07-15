@@ -2,7 +2,7 @@ import type { IMapMockResponse } from '@/constants/mock';
 import { getLatLngsFromGeom } from '@/lib/get-lat-lags-from-geom';
 import { getPackageStatusColor } from '@/lib/package-status-colors';
 import { ExpandMore } from '@mui/icons-material';
-import { Accordion, AccordionDetails, AccordionSummary, Box, Button, Chip, Fade, Popper, Typography } from '@mui/material';
+import { Accordion, AccordionDetails, AccordionSummary, Box, Button, Chip, Fade, Popper, Typography, Tooltip } from '@mui/material';
 import { Map as LeafletMapType } from 'leaflet';
 import { useCallback } from 'react';
 import { TbEye, TbEyeOff, TbZoomScan } from 'react-icons/tb';
@@ -30,7 +30,7 @@ export function LayerPopper({ open, anchorEl, data, visibleZones, visiblePackage
       }
       return newSet
     })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const toggleZoneVisibility = useCallback((zoneId: string) => {
@@ -81,7 +81,21 @@ export function LayerPopper({ open, anchorEl, data, visibleZones, visiblePackage
       transition
       modifiers={[
         { name: 'offset', options: { offset: [0, 8] } },
-        { name: 'preventOverflow', options: { boundary: 'viewport', padding: 16 } }
+        {
+          name: 'preventOverflow',
+          options: {
+            boundary: 'viewport',
+            padding: 16,
+            altAxis: true,
+            altBoundary: true
+          }
+        },
+        {
+          name: 'flip',
+          options: {
+            fallbackPlacements: ['top-start', 'bottom-end', 'top-end']
+          }
+        }
       ]}
     >
       {({ TransitionProps }) => (
@@ -89,12 +103,15 @@ export function LayerPopper({ open, anchorEl, data, visibleZones, visiblePackage
           <Box sx={{
             bgcolor: 'background.paper',
             minWidth: 400,
-            maxWidth: '90vw',
+            maxWidth: 'min(90vw, 500px)',
+            maxHeight: 'min(80vh, 600px)',
             borderRadius: 3,
             boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
             border: '1px solid',
             borderColor: 'divider',
-            overflow: 'hidden'
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column'
           }}>
             {/* Header */}
             <Box sx={{ p: 3, bgcolor: 'grey.50', borderBottom: '1px solid', borderColor: 'divider' }}>
@@ -111,11 +128,18 @@ export function LayerPopper({ open, anchorEl, data, visibleZones, visiblePackage
             </Box>
             <Box sx={{
               p: 2,
-              maxHeight: '70vh',
+              flex: 1,
               overflowY: 'auto',
+              minHeight: 0,
               '&::-webkit-scrollbar': { width: 6 },
               '&::-webkit-scrollbar-track': { bgcolor: 'grey.100', borderRadius: 3 },
-              '&::-webkit-scrollbar-thumb': { bgcolor: 'grey.400', borderRadius: 3 }
+              '&::-webkit-scrollbar-thumb': {
+                bgcolor: 'grey.400',
+                borderRadius: 3,
+                '&:hover': {
+                  bgcolor: 'grey.600'
+                }
+              }
             }}>
               {data?.map((zone) => (
                 <Accordion key={zone.zone_id}>
@@ -136,49 +160,62 @@ export function LayerPopper({ open, anchorEl, data, visibleZones, visiblePackage
                           />
                         ))}
                       </Box>
-                      <Box sx={{ display: 'flex', gap: 1, paddingRight: 1 }}>
-                        <Button
-                          size="small"
-                          sx={{
-                            minWidth: 32,
-                            height: 32,
-                            p: 0.5,
-                            borderRadius: '50%',
-                            '&:hover': {
-                              transform: 'scale(1.1)',
-                              boxShadow: 2
-                            }
-                          }}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            toggleZoneVisibility(zone.zone_id)
-                          }}
-                        >
-                          {visibleZones.has(zone.zone_id) ? (
-                            <TbEye className='w-4 h-4' />
-                          ) : (
-                            <TbEyeOff className='w-4 h-4' />
-                          )}
-                        </Button>
-                        <Button
-                          size="small"
-                          sx={{
-                            minWidth: 32,
-                            height: 32,
-                            p: 0.5,
-                            borderRadius: '50%',
-                            '&:hover': {
-                              transform: 'scale(1.1)',
-                              boxShadow: 2
-                            }
-                          }}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            navigateToGeometry(zone.geometry || [], false)
-                          }}
-                        >
-                          <TbZoomScan className='w-4 h-4' />
-                        </Button>
+                      <Box sx={{ display: 'flex', gap: 0.5, paddingRight: 1 }}>
+                        <Tooltip title="Hiển thị/Ẩn vùng">
+                          <Button
+                            size="small"
+                            sx={{
+                              minWidth: 32,
+                              height: 32,
+                              p: 0.5,
+                              borderRadius: '50%',
+                              color: visibleZones.has(zone.zone_id) ? 'success.main' : 'grey.600',
+                              background: 'transparent',
+                              boxShadow: 'none',
+                              '&:hover': {
+                                transform: 'scale(1.1)',
+                                boxShadow: 2,
+                                borderColor: visibleZones.has(zone.zone_id) ? 'success.dark' : 'grey.500',
+                                background: 'transparent'
+                              }
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              toggleZoneVisibility(zone.zone_id)
+                            }}
+                          >
+                            {visibleZones.has(zone.zone_id) ? (
+                              <TbEye className='w-4 h-4' />
+                            ) : (
+                              <TbEyeOff className='w-4 h-4' />
+                            )}
+                          </Button>
+                        </Tooltip>
+                        <Tooltip title="Zoom đến vùng">
+                          <Button
+                            size="small"
+                            sx={{
+                              minWidth: 32,
+                              height: 32,
+                              p: 0.5,
+                              borderRadius: '50%',
+                              background: 'transparent',
+                              boxShadow: 'none',
+                              '&:hover': {
+                                transform: 'scale(1.1)',
+                                boxShadow: 2,
+                                borderColor: 'primary.dark',
+                                background: 'transparent'
+                              }
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              navigateToGeometry(zone.geometry || [], false)
+                            }}
+                          >
+                            <TbZoomScan className='w-4 h-4' />
+                          </Button>
+                        </Tooltip>
                       </Box>
                     </Box>
                   </AccordionSummary>
@@ -224,43 +261,55 @@ export function LayerPopper({ open, anchorEl, data, visibleZones, visiblePackage
                                 );
                               })()}
                             </Box>
-                            <Box sx={{ display: 'flex', gap: 1 }}>
-                              <Button
-                                size="small"
-                                sx={{
-                                  minWidth: 32,
-                                  height: 32,
-                                  p: 0.5,
-                                  borderRadius: '50%',
-                                  '&:hover': {
-                                    transform: 'scale(1.1)',
-                                    boxShadow: 2
-                                  }
-                                }}
-                                onClick={() => togglePackageVisibility(pkg.package_id)}
-                              >
-                                {visiblePackages.has(pkg.package_id) ? (
-                                  <TbEye className='w-4 h-4' />
-                                ) : (
-                                  <TbEyeOff className='w-4 h-4' />
-                                )}
-                              </Button>
-                              <Button
-                                size="small"
-                                sx={{
-                                  minWidth: 32,
-                                  height: 32,
-                                  p: 0.5,
-                                  borderRadius: '50%',
-                                  '&:hover': {
-                                    transform: 'scale(1.1)',
-                                    boxShadow: 2
-                                  }
-                                }}
-                                onClick={() => navigateToGeometry(pkg.geometry || [], true)}
-                              >
-                                <TbZoomScan className='w-4 h-4' />
-                              </Button>
+                            <Box sx={{ display: 'flex', gap: 0.5 }}>
+                              <Tooltip title="Hiển thị/Ẩn gói thầu">
+                                <Button
+                                  size="small"
+                                  sx={{
+                                    minWidth: 28,
+                                    height: 28,
+                                    p: 0.5,
+                                    borderRadius: '50%',
+                                    background: 'transparent',
+                                    boxShadow: 'none',
+                                    '&:hover': {
+                                      transform: 'scale(1.1)',
+                                      boxShadow: 2,
+                                      borderColor: visiblePackages.has(pkg.package_id) ? 'success.dark' : 'grey.500',
+                                      background: 'transparent'
+                                    }
+                                  }}
+                                  onClick={() => togglePackageVisibility(pkg.package_id)}
+                                >
+                                  {visiblePackages.has(pkg.package_id) ? (
+                                    <TbEye className='w-4 h-4' />
+                                  ) : (
+                                    <TbEyeOff className='w-4 h-4' />
+                                  )}
+                                </Button>
+                              </Tooltip>
+                              <Tooltip title="Zoom đến gói thầu">
+                                <Button
+                                  size="small"
+                                  sx={{
+                                    minWidth: 28,
+                                    height: 28,
+                                    p: 0.5,
+                                    borderRadius: '50%',
+                                    background: 'transparent',
+                                    boxShadow: 'none',
+                                    '&:hover': {
+                                      transform: 'scale(1.1)',
+                                      boxShadow: 2,
+                                      borderColor: 'primary.dark',
+                                      background: 'transparent'
+                                    }
+                                  }}
+                                  onClick={() => navigateToGeometry(pkg.geometry || [], true)}
+                                >
+                                  <TbZoomScan className='w-4 h-4' />
+                                </Button>
+                              </Tooltip>
                             </Box>
                           </Box>
                         ))}

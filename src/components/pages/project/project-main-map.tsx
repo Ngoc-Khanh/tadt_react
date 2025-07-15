@@ -1,10 +1,7 @@
+import { MapLayers } from '@/components/pages/project/project.map-layer';
+import { PackageDetailPanel } from '@/components/pages/project/project.package-panel';
 import { useMockMapData } from '@/hooks';
-import { 
-  selectedZoneAtom, 
-  selectedPackageAtom,
-  sidePanelOpenAtom,
-  selectedPackageIdForPanelAtom
-} from '@/stores';
+import { selectedPackageAtom, selectedPackageIdForPanelAtom, selectedZoneAtom, sidePanelOpenAtom } from '@/stores';
 import { Box } from '@mui/material';
 import { useAtom } from 'jotai';
 import { Map as LeafletMapType } from 'leaflet';
@@ -12,8 +9,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import { MapContainer, TileLayer } from 'react-leaflet';
 import { LayerButton } from './layer-button';
 import { LayerPopper } from './layer-popper';
-import { MapLayers } from './map-layers';
-import { PackageDetailPanel } from './package-detail-panel';
 import { ProjectError } from './project-error';
 import { ProjectLoading } from './project-loading';
 
@@ -32,7 +27,7 @@ export function ProjectMainMap({ projectId }: { projectId: string }) {
   const [selectedPackage, setSelectedPackage] = useAtom(selectedPackageAtom)
   const [sidePanelOpen, setSidePanelOpen] = useAtom(sidePanelOpenAtom)
   const [selectedPackageId, setSelectedPackageId] = useAtom(selectedPackageIdForPanelAtom)
-  
+
   // Handle view details - open side panel
   const handleViewDetails = (packageId: string) => {
     setSelectedPackageId(packageId)

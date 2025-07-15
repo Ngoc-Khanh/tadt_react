@@ -1,7 +1,10 @@
 import { useMockDetailPackage } from '@/hooks';
 import { Close as CloseIcon } from '@mui/icons-material';
-import { Alert, Box, Card, CardContent, CircularProgress, Divider, Drawer, Grid, IconButton, LinearProgress, List, ListItem, ListItemText, Typography } from '@mui/material';
+import { Box, Card, CardContent, Divider, Drawer, IconButton, LinearProgress, List, ListItem, ListItemText, Typography } from '@mui/material';
 import React from 'react';
+import { PackageData } from './package-data';
+import { PackageError } from './package-error';
+import { PackageLoading } from './package-loading';
 
 interface PackageDetailPanelProps {
   open: boolean;
@@ -16,85 +19,9 @@ export const PackageDetailPanel: React.FC<PackageDetailPanelProps> = ({
 }) => {
   const { data: packageData, isLoading, error } = useMockDetailPackage(packageId || '');
 
-  if (isLoading) {
-    return (
-      <Drawer
-        anchor="right"
-        open={open}
-        onClose={onClose}
-        sx={{
-          '& .MuiDrawer-paper': {
-            width: 600,
-            boxSizing: 'border-box',
-          },
-        }}
-      >
-        <Box sx={{ p: 3, height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <CircularProgress />
-        </Box>
-      </Drawer>
-    );
-  }
-
-  if (error) {
-    return (
-      <Drawer
-        anchor="right"
-        open={open}
-        onClose={onClose}
-        sx={{
-          '& .MuiDrawer-paper': {
-            width: 600,
-            boxSizing: 'border-box',
-          },
-        }}
-      >
-        <Box sx={{ p: 3 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-            <Typography variant="h5" component="h2" fontWeight="bold">
-              Chi tiết gói
-            </Typography>
-            <IconButton onClick={onClose} size="small">
-              <CloseIcon />
-            </IconButton>
-          </Box>
-          <Alert severity="error">
-            {error.message || 'Không thể tải dữ liệu gói thầu'}
-          </Alert>
-        </Box>
-      </Drawer>
-    );
-  }
-
-  if (!packageData) {
-    return (
-      <Drawer
-        anchor="right"
-        open={open}
-        onClose={onClose}
-        sx={{
-          '& .MuiDrawer-paper': {
-            width: 600,
-            boxSizing: 'border-box',
-          },
-        }}
-      >
-        <Box sx={{ p: 3 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-            <Typography variant="h5" component="h2" fontWeight="bold">
-              Chi tiết gói
-            </Typography>
-            <IconButton onClick={onClose} size="small">
-              <CloseIcon />
-            </IconButton>
-          </Box>
-          <Alert severity="info">
-            Vui lòng chọn một gói thầu để xem chi tiết
-          </Alert>
-        </Box>
-      </Drawer>
-    );
-  }
+  if (isLoading) return <PackageLoading open={open} onClose={onClose} />;
+  if (error) return <PackageError open={open} onClose={onClose} error={error} />;
+  if (!packageData) return <PackageData open={open} onClose={onClose} />;
 
   // Xử lý dữ liệu
   const actualProgress = packageData.tien_do_thuc_te || 0;
@@ -145,8 +72,8 @@ export const PackageDetailPanel: React.FC<PackageDetailPanelProps> = ({
         <Divider sx={{ mb: 3 }} />
 
         {/* Thông tin chi tiết */}
-        <Grid container spacing={3}>
-          <Grid item xs={12} md={6}>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+          <Box sx={{ flex: '1 1 300px', minWidth: '300px' }}>
             <Card variant="outlined" sx={{ mb: 2 }}>
               <CardContent>
                 <Typography variant="subtitle2" color="text.secondary" gutterBottom>
@@ -177,8 +104,8 @@ export const PackageDetailPanel: React.FC<PackageDetailPanelProps> = ({
                 </Typography>
               </CardContent>
             </Card>
-          </Grid>
-          <Grid item xs={12} md={6}>
+          </Box>
+          <Box sx={{ flex: '1 1 300px', minWidth: '300px' }}>
             <Card variant="outlined" sx={{ mb: 2 }}>
               <CardContent>
                 <Typography variant="subtitle2" color="text.secondary" gutterBottom>
@@ -223,8 +150,8 @@ export const PackageDetailPanel: React.FC<PackageDetailPanelProps> = ({
                 </Typography>
               </CardContent>
             </Card>
-          </Grid>
-        </Grid>
+          </Box>
+        </Box>
 
         <Divider sx={{ my: 3 }} />
 

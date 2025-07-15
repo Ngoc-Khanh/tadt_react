@@ -1,36 +1,81 @@
-import React, { useMemo, useCallback, useEffect, useState, useRef } from 'react'
-import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet'
-import { LatLngBounds } from 'leaflet'
-import { useAtom, useSetAtom } from 'jotai'
-import { Box, Button, Tooltip } from '@mui/material'
-import { Layers } from '@mui/icons-material'
+import type { GeometryData, LayerGroup, SelectedFeature, SelectedLineString } from '@/stores/importKMLAtoms'
 import {
-  shouldFitBoundsAtom,
   clearFitBoundsAtom,
   manualBoundsAtom,
-  setSelectedLineStringAtom,
-  selectedFeaturesForMapAtom
+  selectedFeaturesForMapAtom,
+  shouldFitBoundsAtom
 } from '@/stores/importKMLAtoms'
-import type { LayerGroup, GeometryData, SelectedLineString, SelectedFeature } from '@/stores/importKMLAtoms'
-import { LayerStatsPanel } from './layer-stats-panel'
+import { Layers } from '@mui/icons-material'
+import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Tooltip } from '@mui/material'
+import { useAtom, useSetAtom } from 'jotai'
+import { LatLngBounds } from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { GeoJSON, MapContainer, TileLayer, useMap } from 'react-leaflet'
+import { LayerStatsPanel } from './layer-stats-panel'
 
-// Component để handle map resize
-const MapResizeHandler = React.memo(() => {
+// Component để handle map resize với throttling
+const MapResizeHandler = React.memo(({ panelVisible }: { panelVisible: boolean }) => {
   const map = useMap()
+  const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     const handleResize = () => {
-      setTimeout(() => {
-        map.invalidateSize()
-      }, 100)
+      // Clear any existing timeout để tránh multiple calls
+      if (resizeTimeoutRef.current) {
+        clearTimeout(resizeTimeoutRef.current)
+      }
+
+      // Sử dụng single timeout với delay tối ưu
+      resizeTimeoutRef.current = setTimeout(() => {
+        map.invalidateSize(false) // Sử dụng false để không animate
+      }, 320) // Delay ngắn hơn nhưng vẫn đảm bảo animation hoàn thành
     }
 
-    window.addEventListener('resize', handleResize)
+    // Trigger resize when panel visibility changes
     handleResize()
 
     return () => {
-      window.removeEventListener('resize', handleResize)
+      if (resizeTimeoutRef.current) {
+        clearTimeout(resizeTimeoutRef.current)
+      }
+    }
+  }, [map, panelVisible])
+
+  return null
+})
+
+// Component để theo dõi thay đổi kích thước container với throttling
+const MapContainerResizeObserver = React.memo(() => {
+  const map = useMap()
+  const throttleTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  useEffect(() => {
+    if (!map) return
+
+    const mapContainer = map.getContainer()
+    if (!mapContainer) return
+
+    // Tạo ResizeObserver với throttling
+    const resizeObserver = new ResizeObserver(() => {
+      // Clear existing timeout để tránh quá nhiều calls
+      if (throttleTimeoutRef.current) {
+        clearTimeout(throttleTimeoutRef.current)
+      }
+
+      // Throttle resize calls
+      throttleTimeoutRef.current = setTimeout(() => {
+        map.invalidateSize(false) // Không animate để mượt hơn
+      }, 100) // Delay ngắn nhưng vẫn throttle
+    })
+
+    resizeObserver.observe(mapContainer)
+
+    return () => {
+      if (throttleTimeoutRef.current) {
+        clearTimeout(throttleTimeoutRef.current)
+      }
+      resizeObserver.disconnect()
     }
   }, [map])
 
@@ -49,21 +94,21 @@ const FitBoundsController = React.memo(() => {
       const timer = setTimeout(() => {
         try {
           const [[minLat, minLng], [maxLat, maxLng]] = manualBounds
-          
+
           // Validate bounds
           if (isNaN(minLat) || isNaN(minLng) || isNaN(maxLat) || isNaN(maxLng)) {
             console.warn('[FitBoundsController] Invalid bounds detected:', manualBounds)
             clearFitBounds()
             return
           }
-          
+
           // Kiểm tra bounds có hợp lệ không
           if (minLat >= maxLat || minLng >= maxLng) {
             console.warn('[FitBoundsController] Invalid bounds range:', manualBounds)
             clearFitBounds()
             return
           }
-          
+
           // Kiểm tra bounds có quá nhỏ không
           const latDiff = maxLat - minLat
           const lngDiff = maxLng - minLng
@@ -74,7 +119,7 @@ const FitBoundsController = React.memo(() => {
           }
 
           const latLngBounds = new LatLngBounds(
-            [minLat, minLng], 
+            [minLat, minLng],
             [maxLat, maxLng]
           )
 
@@ -136,7 +181,8 @@ const LayerRenderer = React.memo(({
   layer,
   groupVisible,
   groupId,
-  groupName
+  groupName,
+  onOpenAssignPackageDialog
 }: {
   layer: {
     id: string
@@ -147,9 +193,9 @@ const LayerRenderer = React.memo(({
   },
   groupVisible: boolean,
   groupId: string,
-  groupName: string
+  groupName: string,
+  onOpenAssignPackageDialog: (selectedLineString: SelectedLineString) => void
 }) => {
-  const setSelectedLineString = useSetAtom(setSelectedLineStringAtom)
   const [selectedFeatures] = useAtom(selectedFeaturesForMapAtom)
   const setSelectedFeatures = useSetAtom(selectedFeaturesForMapAtom)
 
@@ -278,7 +324,8 @@ const LayerRenderer = React.memo(({
                 }
               }
 
-              setSelectedLineString(selectedLineString)
+              // Mở dialog assign package
+              onOpenAssignPackageDialog(selectedLineString)
               leafletLayer.closePopup()
             })
           }
@@ -287,7 +334,7 @@ const LayerRenderer = React.memo(({
         return popupDiv
       })
     }
-  }, [layer.id, groupId, groupName, layer.name, setSelectedLineString, selectedFeatures, setSelectedFeatures])
+  }, [layer.id, groupId, groupName, layer.name, selectedFeatures, setSelectedFeatures, onOpenAssignPackageDialog])
 
   if (!geoJsonData) return null
 
@@ -309,8 +356,32 @@ interface LeafletMapProps {
 export const LeafletMap = ({
   layerGroups,
 }: LeafletMapProps) => {
-  const [showLayerPanel, setShowLayerPanel] = useState(false)
+  const [showLayerPanel, setShowLayerPanel] = useState(true)
+  const [assignPackageDialogOpen, setAssignPackageDialogOpen] = useState(false)
+  const [selectedLineStringForDialog, setSelectedLineStringForDialog] = useState<SelectedLineString | null>(null)
   const mapRef = useRef<L.Map | null>(null)
+  const panelTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Effect để handle resize map khi panel state thay đổi với debouncing
+  useEffect(() => {
+    if (mapRef.current) {
+      // Clear existing timeout
+      if (panelTimeoutRef.current) {
+        clearTimeout(panelTimeoutRef.current)
+      }
+
+      // Single resize call với delay tối ưu
+      panelTimeoutRef.current = setTimeout(() => {
+        mapRef.current?.invalidateSize(false) // Không animate để tránh lag
+      }, 350) // Delay để đảm bảo animation hoàn thành
+
+      return () => {
+        if (panelTimeoutRef.current) {
+          clearTimeout(panelTimeoutRef.current)
+        }
+      }
+    }
+  }, [showLayerPanel])
 
   // Function để navigate đến layer
   const handleNavigateToLayer = useCallback((bounds: [[number, number], [number, number]]) => {
@@ -329,6 +400,12 @@ export const LeafletMap = ({
     }
   }, [])
 
+  // Function để handle assign package dialog
+  const handleOpenAssignPackageDialog = useCallback((selectedLineString: SelectedLineString) => {
+    setSelectedLineStringForDialog(selectedLineString)
+    setAssignPackageDialogOpen(true)
+  }, [])
+
   // Render visible layers với memoization
   const visibleLayers = useMemo(() => {
     return layerGroups
@@ -341,94 +418,150 @@ export const LeafletMap = ({
             groupVisible={group.visible}
             groupId={group.id}
             groupName={group.name}
+            onOpenAssignPackageDialog={handleOpenAssignPackageDialog}
           />
         ))
       )
-  }, [layerGroups])
+  }, [layerGroups, handleOpenAssignPackageDialog])
 
   return (
-    <div className='h-screen w-full relative'>
-      <MapContainer
-        center={[21.0285, 105.8542]} // Hà Nội mặc định
-        zoom={10}
-        style={{ height: '100%', width: '100%' }}
-        zoomControl={true}
-        scrollWheelZoom={true}
-        doubleClickZoom={true}
-        dragging={true}
-        preferCanvas={true}
-        attributionControl={true}
-        worldCopyJump={true}
-      >
-        <TileLayer
-          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          subdomains="abcd"
-          maxZoom={20}
-        />
-
-        {/* Map resize handler */}
-        <MapResizeHandler />
-
-        {/* Controller để tự động fit bounds */}
-        <FitBoundsController />
-
-        {/* Controller để expose map reference */}
-        <MapRefController onMapReady={(map) => { mapRef.current = map }} />
-
-        {/* Render các layers */}
-        {visibleLayers}
-      </MapContainer>
-
-      {/* Button để mở Layer Stats Panel */}
-      {!showLayerPanel && (
-        <Box
-          sx={{
-            position: 'absolute',
-            top: 16,
-            right: 16,
-            zIndex: 1000,
-            animation: 'slideInFromRight 0.3s ease-out'
-          }}
+    <div className='h-screen w-full flex'>
+      {/* Map Container */}
+      <div className='flex-1 relative'>
+        <MapContainer
+          center={[21.0285, 105.8542]} // Hà Nội mặc định
+          zoom={10}
+          style={{ height: '100%', width: '100%' }}
+          zoomControl={true}
+          scrollWheelZoom={true}
+          doubleClickZoom={true}
+          dragging={true}
+          preferCanvas={true}
+          attributionControl={true}
+          worldCopyJump={true}
         >
-          <Tooltip title="Hiển thị thống kê layers">
-            <Button
-              onClick={() => setShowLayerPanel(true)}
-              variant="contained"
-              size="small"
-              startIcon={<Layers />}
-              sx={{
-                borderRadius: 2,
-                boxShadow: 3,
-                bgcolor: 'primary.main',
-                color: 'white',
-                textTransform: 'none',
-                fontWeight: 600,
-                px: 2,
-                '&:hover': {
-                  bgcolor: 'primary.dark',
-                  boxShadow: 4,
-                  transform: 'scale(1.05)'
-                },
-                transition: 'all 0.2s ease-in-out'
-              }}
-            >
-              Chi tiết ({layerGroups.length})
-            </Button>
-          </Tooltip>
-        </Box>
-      )}
+          <TileLayer
+            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+            subdomains="abcd"
+            maxZoom={20}
+          />
 
-      {/* Layer Stats Panel */}
-      <LayerStatsPanel
-        open={showLayerPanel}
-        onClose={() => setShowLayerPanel(false)}
-        onRefresh={() => {
-          // Có thể thêm logic refresh ở đây nếu cần
-          console.log('Refreshing layer stats...')
+          {/* Map resize handler */}
+          <MapResizeHandler panelVisible={showLayerPanel} />
+
+          {/* Container resize observer */}
+          <MapContainerResizeObserver />
+
+          {/* Controller để tự động fit bounds */}
+          <FitBoundsController />
+
+          {/* Controller để expose map reference */}
+          <MapRefController onMapReady={(map) => { mapRef.current = map }} />
+
+          {/* Render các layers */}
+          {visibleLayers}
+        </MapContainer>
+
+        {/* Button để mở Layer Stats Panel - giữ nguyên ở bên phải */}
+        {!showLayerPanel && (
+          <Box
+            sx={{
+              position: 'absolute',
+              top: 16,
+              right: 16,
+              zIndex: 1000,
+              animation: 'slideInFromRight 0.3s ease-out'
+            }}
+          >
+            <Tooltip title="Hiển thị thống kê layers">
+              <Button
+                onClick={() => setShowLayerPanel(true)}
+                variant="contained"
+                size="small"
+                startIcon={<Layers />}
+                sx={{
+                  borderRadius: 2,
+                  boxShadow: 3,
+                  bgcolor: 'primary.main',
+                  color: 'white',
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  px: 2,
+                  '&:hover': {
+                    bgcolor: 'primary.dark',
+                    boxShadow: 4,
+                    transform: 'scale(1.05)'
+                  },
+                  transition: 'all 0.2s ease-in-out'
+                }}
+              >
+                Chi tiết ({layerGroups.length})
+              </Button>
+            </Tooltip>
+          </Box>
+        )}
+      </div>
+
+      {/* Layer Stats Panel - Side Panel bên phải với animation tối ưu */}
+      <div
+        className={`transition-all duration-300 ease-out ${showLayerPanel ? 'w-96' : 'w-0'
+          } flex-shrink-0 overflow-hidden`}
+        style={{
+          willChange: showLayerPanel ? 'auto' : 'transform', // Tối ưu GPU acceleration
         }}
-        onNavigateToLayer={handleNavigateToLayer}
-      />
+      >
+        {showLayerPanel && (
+          <div className="h-full bg-white border-l border-gray-200 shadow-lg w-96">
+            <LayerStatsPanel
+              open={showLayerPanel}
+              onClose={() => setShowLayerPanel(false)}
+              onRefresh={() => {
+                console.log('Refreshing layer stats...')
+              }}
+              onNavigateToLayer={handleNavigateToLayer}
+              isFullPanel={true}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Dialog đính gói thầu */}
+      <Dialog
+        open={assignPackageDialogOpen}
+        onClose={() => setAssignPackageDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          Đính gói thầu cho LineString
+        </DialogTitle>
+        <DialogContent>
+          {selectedLineStringForDialog && (
+            <div>
+              <p><strong>Thông tin LineString:</strong></p>
+              <p>Feature ID: {selectedLineStringForDialog.featureId}</p>
+              <p>Layer: {selectedLineStringForDialog.layerId}</p>
+              <p>Group: {selectedLineStringForDialog.groupId}</p>
+              {selectedLineStringForDialog.geometry.coordinates && (
+                <p>Số điểm: {selectedLineStringForDialog.geometry.coordinates.length}</p>
+              )}
+            </div>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAssignPackageDialogOpen(false)} color="secondary">
+            Hủy
+          </Button>
+          <Button onClick={() => {
+            // Xử lý logic đính gói thầu ở đây
+            console.log('Đính gói thầu cho:', selectedLineStringForDialog)
+            setAssignPackageDialogOpen(false)
+          }} color="primary" variant="contained">
+            Xác nhận
+          </Button>
+        </DialogActions>
+      </Dialog>
     </div>
   )
 } 

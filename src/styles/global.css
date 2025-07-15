@@ -23,3 +23,55 @@
     opacity: 0;
   }
 }
+
+@keyframes slideInFromLeft {
+  0% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOutToLeft {
+  0% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+}
+
+/* Bo góc cho panel overlay bên phải */
+.panel-overlay-rounded {
+  border-radius: 16px 0 0 16px;
+  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.1);
+}
+
+/* Smooth transition cho map resize */
+.leaflet-container {
+  transition: all 0.3s ease-in-out;
+}
+
+/* Custom scrollbar cho panel */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}

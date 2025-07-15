@@ -135,14 +135,43 @@ export const toggleLayerVisibilityAtom = atom(
 export const toggleGroupVisibilityAtom = atom(
   null,
   (get, set, groupId: string) => {
-    const currentGroups = get(layerGroupsAtom)
-    const updatedGroups = currentGroups.map(group => {
+    const layerGroups = get(layerGroupsAtom)
+    const updatedGroups = layerGroups.map(group => {
       if (group.id === groupId) {
         return { ...group, visible: !group.visible }
       }
       return group
     })
     set(layerGroupsAtom, updatedGroups)
+  }
+)
+
+export const removeLayerAtom = atom(
+  null,
+  (get, set, { groupId, layerId }: { groupId: string; layerId: string }) => {
+    const layerGroups = get(layerGroupsAtom)
+    const updatedGroups = layerGroups.map(group => {
+      if (group.id === groupId) {
+        return {
+          ...group,
+          layers: group.layers.filter(layer => layer.id !== layerId)
+        }
+      }
+      return group
+    }).filter(group => group.layers.length > 0) // Xóa group nếu không còn layer nào
+    
+    set(layerGroupsAtom, updatedGroups)
+    
+    // Xóa selected features liên quan đến layer bị xóa
+    const selectedFeatures = get(selectedFeaturesForMapAtom)
+    const filteredFeatures = selectedFeatures.filter(feature => feature.layerId !== layerId)
+    set(selectedFeaturesForMapAtom, filteredFeatures)
+    
+    // Xóa selected line string nếu thuộc layer bị xóa
+    const selectedLineString = get(selectedLineStringAtom)
+    if (selectedLineString && selectedLineString.layerId === layerId) {
+      set(selectedLineStringAtom, null)
+    }
   }
 )
 
@@ -187,4 +216,4 @@ export const setShouldFitBoundsAtom = atom(
     set(manualBoundsAtom, bounds)
     set(shouldFitBoundsAtom, true)
   }
-) 
+)
